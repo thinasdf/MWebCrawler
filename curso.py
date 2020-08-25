@@ -28,16 +28,27 @@ def cursos(codigo='\d+', nivel='graduacao', campus=DARCY_RIBEIRO):
     O argumento 'codigo' deve ser uma expressão regular.
     """
 
-    CURSOS = '<tr CLASS=PadraoMenor bgcolor=.*?>'\
+    """CURSOS = '<tr CLASS=PadraoMenor bgcolor=.*?>'\
              '<td>(\w+)</td>' \
              '<td>\d+</td>' \
              '.*?aspx\?cod=(%s)>(.*?)</a></td>' \
-             '<td>(.*?)</td></tr>' % codigo
+             '<td>(.*?)</td></tr>' % codigo"""
+
+    CURSOS = '<tr>' \
+             '<td>(\w+)</td>' \
+             '<td>(%s)</td>' \
+             r'<td><a href=curso_dados\.aspx\?cod=\2>([^<]+)</a></td>' \
+             '<td>(\w+)</td>' \
+             '</tr>' % codigo
+
 
     lista = {}
     try:
         pagina_html = busca(url_mweb(nivel, 'curso_rel', campus))
-        cursos_existentes = encontra_padrao(CURSOS, pagina_html.content)
+        print(pagina_html.url)
+        #print(pagina_html.content)
+        print(CURSOS)
+        cursos_existentes = encontra_padrao(CURSOS, pagina_html.content.decode('utf-8'))
         for modalidade, codigo, denominacao, turno in cursos_existentes:
             lista[codigo] = {}
             lista[codigo]['Modalidade'] = modalidade
