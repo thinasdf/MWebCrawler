@@ -41,12 +41,11 @@ def cursos(codigo='\d+', nivel='graduacao', campus=DARCY_RIBEIRO):
              '<td>(\w+)</td>' \
              '</tr>' % codigo
 
-
     lista = {}
     try:
         pagina_html = busca(url_mweb(nivel, 'curso_rel', campus))
         print(pagina_html.url)
-        #print(pagina_html.content)
+        # print(pagina_html.content.decode('utf-8'))
         print(CURSOS)
         cursos_existentes = encontra_padrao(CURSOS, pagina_html.content.decode('utf-8'))
         for modalidade, codigo, denominacao, turno in cursos_existentes:
@@ -71,38 +70,41 @@ def disciplina(codigo, nivel='graduacao'):
     nivel -- nível acadêmico da disciplina: graduacao ou posgraduacao.
              (default graduacao)
     """
-    DISCIPLINAS = 'Órgão:</b> </td><td>(\w+) - (.*?)</td></tr>' \
-                  '.*?' \
-                  'Denominação:</b> </td><td>(.*?)</td></tr>' \
-                  '.*?' \
-                  'Nível:</b> </td><td>(.*?)</td></tr>' \
-                  '.*?' \
-                  'Vigência:</b> </td><td>(.*?)</td></tr>' \
-                  '.*?' \
-                  'Pré-req:</b> </td><td class=PadraoMenor>(.*?)</td></tr>' \
-                  '.*?' \
-                  'Ementa:</b> </td><td class=PadraoMenor>' \
-                  '<p align=justify>(.*?)</P></td></tr>' \
-                  '.*?' \
-                  'Programa:</b> </td><td class=PadraoMenor>' \
-                  '<p align=justify>(.*?)</P></td></tr>' \
-                  '.*?' \
-                  'Bibliografia:</b> </td><td class=PadraoMenor>' \
-                  '<p align=justify>(.*?)</P></td></tr>'
+
+    disciplina_parse_info = {
+        'Departamento':     {'pattern': '<tr><th class=[^>]*>Órgão</th><td class=[^>]*>([^<]*)</td></tr>'},
+        'Denominação':      {'pattern': '<tr><th>Denominação</th><td>([^<]*)</td></tr>'},
+        'Nivel':            {'pattern': '<tr><th>Nível</th><td>([^<]*)</td></tr>'},
+        'Vigência':         {'pattern': '<tr><th>Início da Vigência em</th><td>([^<]*)</td></tr>'},
+        'Pré-requisitos':   {'pattern': '<tr><th>Pré-requisitos</th><td>(.*?)</td></tr>',
+                             'replace': [['<br>', ' ']]},
+        'Ementa':           {'pattern':
+                                 '<tr><th rowspan=[^>]*>Ementa</th><td>Início da Vigência em <b>[^<]+</b></td></tr>'
+                                 '<tr><td><p align=\w+>(.*?)</td></tr>',
+                             'replace': [['<br />', '\n']]},
+        'Programa':         {'pattern': '<tr><th rowspan=[^>]*>Programa</th><td>Início da Vigência em <b>[^<]+</b>'
+                                        '</td></tr><tr><td><p align=\w+>(.*?)</td></tr>',
+                             'replace': [['<br />', '\n']]},
+        'Bibliografia':     {'pattern':
+                                 '<tr><th rowspan=[^>]*>Bibliografia</th><td>Início da Vigência em <b>[^<]+</b></td>'
+                                 '</tr><tr><td><p align=\w+>(.*?)</td></tr>',
+                             'replace': [['<br />', '\n']]}
+    }
 
     disc = {}
     try:
         pagina_html = busca(url_mweb(nivel, 'disciplina', codigo))
-        ofertadas = encontra_padrao(DISCIPLINAS, pagina_html.content)
-        disc['Código do Departamento'] = ofertadas[0][0]
-        disc['Nome do Departamento'] = ofertadas[0][1]
-        disc['Denominação'] = ofertadas[0][2]
-        disc['Nivel'] = ofertadas[0][3]
-        disc['Vigência'] = ofertadas[0][4]
-        disc['Pré-requisitos'] = ofertadas[0][5].replace('<br>', ' ')
-        disc['Ementa'] = ofertadas[0][6].replace('<br />', '\n')
-        disc['Programa'] = ofertadas[0][7].replace('<br />', '\n')
-        disc['Bibliografia'] = ofertadas[0][8].replace('<br />', '\n')
+        content = pagina_html.content.decode('utf-8')
+        content = content.replace('\n', '')
+        content = content.replace('\r', '')
+        for item, info in disciplina_parse_info.items():
+            pattern = info['pattern']
+            text = encontra_padrao(pattern, content)[0]
+            if 'replace' in info:
+                for r in info['replace']:
+                    text = text.replace(r[0], r[1])
+            disc[item] = text
+            # replace_tags
     except RequestException as erro:
         pass
         # print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
@@ -145,7 +147,7 @@ def habilitacao(codigo, nivel='graduacao'):
     curso = {}
     try:
         pagina_html = busca(url_mweb(nivel, 'curso_dados', codigo))
-        oferta = encontra_padrao(OPCAO, pagina_html.content)
+        oferta = encontra_padrao(OPCAO, pagina_html.content.decode('utf-8'))
         for opcao, grau, min, max, formatura, obr, opt, livre in oferta:
             curso[opcao] = {}
             curso[opcao]['Grau'] = grau
@@ -177,7 +179,7 @@ def fluxo(codigo, nivel='graduacao'):
     curso = {}
     try:
         pagina_html = busca(url_mweb(nivel, 'fluxo', codigo))
-        oferta = encontra_padrao(PERIODO, pagina_html.content)
+        oferta = encontra_padrao(PERIODO, pagina_html.content.decode('utf-8'))
         for periodo, creditos, dados in oferta:
             curso[periodo] = {}
             curso[periodo]['Créditos'] = creditos
@@ -187,7 +189,6 @@ def fluxo(codigo, nivel='graduacao'):
         # print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
 
     return curso
-
 
 # cursos_ = cursos()
 # for c in cursos_:
