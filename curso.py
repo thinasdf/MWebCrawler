@@ -9,56 +9,44 @@
 #
 # Erros em requests são ignorados silenciosamente.
 
-
+from RPA.Browser import Browser
 from utils import *
-
 
 def cursos(codigo='\d+', nivel='graduacao', campus=DARCY_RIBEIRO):
     """Acessa o Matrícula Web e retorna um dicionário com a lista de cursos.
-
     Argumentos:
-    codigo -- o código do curso
-            (default \d+) (todos)
     nivel -- nível acadêmico dos cursos: graduacao ou posgraduacao.
              (default graduacao)
     campus -- o campus onde o curso é oferecido: DARCY_RIBEIRO, PLANALTINA,
               CEILANDIA ou GAMA
               (default DARCY_RIBEIRO)
 
-    O argumento 'codigo' deve ser uma expressão regular.
     """
 
-    """CURSOS = '<tr CLASS=PadraoMenor bgcolor=.*?>'\
-             '<td>(\w+)</td>' \
-             '<td>\d+</td>' \
-             '.*?aspx\?cod=(%s)>(.*?)</a></td>' \
-             '<td>(.*?)</td></tr>' % codigo"""
+    locator_cursos = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr[position()>1]'
 
-    CURSOS = '<tr>' \
-             '<td>(\w+)</td>' \
-             '<td>(%s)</td>' \
-             r'<td><a href=curso_dados\.aspx\?cod=\2>([^<]+)</a></td>' \
-             '<td>(\w+)</td>' \
-             '</tr>' % codigo
+    url_cursos = url_mweb(nivel, 'curso_rel', campus)
+    lib = Browser()
+    #lib.open_chrome_browser(url_cursos)
+    lib.open_headless_chrome_browser(url_cursos)
 
-    lista = {}
+    list_cursos = {}
     try:
-        pagina_html = busca(url_mweb(nivel, 'curso_rel', campus))
-        print(pagina_html.url)
-        # print(pagina_html.content.decode('utf-8'))
-        print(CURSOS)
-        cursos_existentes = encontra_padrao(CURSOS, pagina_html.content.decode('utf-8'))
-        for modalidade, codigo, denominacao, turno in cursos_existentes:
-            lista[codigo] = {}
-            lista[codigo]['Modalidade'] = modalidade
-            lista[codigo]['Denominação'] = denominacao
-            lista[codigo]['Turno'] = turno
+        for element in lib.find_elements(locator_cursos):
+            row = [item.text for item in element.find_elements_by_tag_name('td')]
+            modalidade, codigo, denominacao, turno = row
+            list_cursos[codigo] = {}
+            list_cursos[codigo]['Modalidade'] = modalidade
+            list_cursos[codigo]['Denominação'] = denominacao
+            list_cursos[codigo]['Turno'] = turno
+
     except RequestException as erro:
         pass
         # print 'Erro ao buscar %s para %s em %d.\n%s' %
         #     (codigo, nivel, campus, erro)
-
-    return lista
+    finally:
+        lib.driver.close()
+    return list_cursos
 
 
 def disciplina(codigo, nivel='graduacao'):
