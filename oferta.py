@@ -10,44 +10,43 @@
 #
 # Erros em requests são ignorados silenciosamente.
 
-
 from utils import *
 
 
-def departamentos(codigo='\d+', nivel='graduacao', campus=DARCY_RIBEIRO):
+def departamentos(nivel='graduacao', campus=DARCY_RIBEIRO):
     """Acessa o Matrícula Web e retorna um dicionário com a lista de
     departamentos com ofertas.
 
     Argumentos:
-    codigo -- o código do Departamento.
-            (default \d+)
     nivel -- nível acadêmico do Departamento: graduacao ou posgraduacao.
              (default graduacao)
     campus -- o campus onde o curso é oferecido: DARCY_RIBEIRO, PLANALTINA,
               CEILANDIA ou GAMA
               (default DARCY_RIBEIRO)
-
-
-    O argumento 'codigo' deve ser uma expressão regular.
     """
-    DEPARTAMENTOS = '<tr CLASS=PadraoMenor bgcolor=.*?>'\
-                    '<td>\d+</td><td>(\w+)</td>' \
-                    '.*?aspx\?cod=(%s)>(.*?)</a></td></tr>' % codigo
 
-    deptos = {}
+    departamentos_url = url_mweb(nivel, 'oferta_dep', campus)
+    lib = Browser()
+    #lib.open_chrome_browser(departamentos_url)
+    lib.open_headless_chrome_browser(departamentos_url)
+    departamentos = {}
     try:
-        pagina_html = busca(url_mweb(nivel, 'oferta_dep', campus))
-        deptos_existentes = encontra_padrao(DEPARTAMENTOS, pagina_html.content)
-        for sigla, codigo, denominacao in deptos_existentes:
-            deptos[codigo] = {}
-            deptos[codigo]['Sigla'] = sigla
-            deptos[codigo]['Denominação'] = denominacao
-    except RequestException as erro:
-        pass
-        # print 'Erro ao buscar %s para %s em %d.\n%s' %
-        #     (codigo, nivel, campus, erro)
+        table_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
+        table_elements = lib.find_elements(table_locator)
 
-    return deptos
+        titles = [item.text for item in table_elements[0].find_elements_by_tag_name('th')]
+        codigo_idx = 0  # índice do código do departamento
+        del titles[codigo_idx]
+
+        for element in table_elements[1:]:
+            line = [item.text for item in element.find_elements_by_tag_name('td')]
+            codigo = line.pop(codigo_idx)
+            departamentos[codigo] = dict(zip(titles, line))
+    except:
+        print('erro em departamentos')
+    finally:
+        lib.driver.close()
+    return departamentos
 
 
 def disciplinas(dept=116, nivel='graduacao'):
