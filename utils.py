@@ -4,9 +4,9 @@
 #
 # Utilidades.
 
-from requests import get as busca
-from requests.exceptions import RequestException as RequestException
-from re import findall as encontra_padrao
+#from requests import get as busca
+#from requests.exceptions import RequestException as RequestException
+#from re import findall as encontra_padrao
 #from re import match
 
 

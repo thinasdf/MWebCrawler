@@ -1,9 +1,9 @@
 import curso
 
-# Testa Cursos
-# cursos = curso.cursos()
-# for item in cursos:
-#     print(item, cursos[item])
+#Testa Cursos
+cursos = curso.cursos()
+for item in cursos:
+    print(item, cursos[item])
 
 
 # # Testa Disciplina
@@ -20,7 +20,7 @@ import curso
 #         print('\t' + item + ':', '\t', items[item])
 
 
-# Testa Curriculo
-curriculo = curso.curriculo(3841)
-for disciplina in curriculo:
-    print(disciplina)
+# # Testa Curriculo
+# curriculo = curso.curriculo(3841)
+# for disciplina in curriculo:
+#     print(disciplina)

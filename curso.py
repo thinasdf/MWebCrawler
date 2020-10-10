@@ -1,4 +1,3 @@
-# modificar a funcao cursos para pegar automaticamente o titulo da coluna
 # departamentos
 # criar objetos: disciplina, departamento, curso, curriculo, habilitacao
 # montar grafo de dependencias das disciplinas
@@ -37,28 +36,35 @@ def cursos(nivel='graduacao', campus=DARCY_RIBEIRO):
     #lib.open_chrome_browser(url_cursos)
     lib.open_headless_chrome_browser(url_cursos)
 
-    list_cursos = {}
+    cursos = {}
     try:
-        locator_cursos = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr[position()>1]'
-        for element in lib.find_elements(locator_cursos):
-            row = [item.text for item in element.find_elements_by_tag_name('td')]
-            modalidade, codigo, denominacao, turno = row
-            list_cursos[codigo] = {}
-            list_cursos[codigo]['Modalidade'] = modalidade
-            list_cursos[codigo]['Denominação'] = denominacao
-            list_cursos[codigo]['Turno'] = turno
+        table_locator = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr'
+        table_elements = lib.find_elements(table_locator)
 
-    except: #RequestException as erro:
+        titles = [item.text for item in table_elements[0].find_elements_by_tag_name('th')]
+        del titles[1] # codigo do curso
+
+        for element in table_elements[1:]:
+            line = [item.text for item in element.find_elements_by_tag_name('td')]
+            codigo = line.pop(1)
+            cursos[codigo] = dict(zip(titles, line))
+    except:
         print('erro em cursos')
-        # print 'Erro ao buscar %s para %s em %d.\n%s' %
-        #     (codigo, nivel, campus, erro)
     finally:
         lib.driver.close()
 
-    return list_cursos
+    return cursos
 
 
 def disciplina(codigo, nivel='graduacao'):
+    """Acessa o Matrícula Web e retorna um dicionário com as informações da
+    disciplina.
+    Argumentos:
+    codigo -- o código da disciplina.
+    nivel -- nível acadêmico da disciplina: graduacao ou posgraduacao.
+             (default graduacao)
+    """
+
     url_disciplinas = url_mweb(nivel, 'disciplina', codigo)
     #print(url_disciplinas)
 
@@ -135,6 +141,7 @@ def habilitacao(codigo, nivel='graduacao'):
        lib.driver.close()
     return habilitacao
 
+
 def curriculo(codigo, nivel='graduacao'):
     """Acessa o Matrícula Web e retorna a lista de
     disciplinas definidas no curriculo do curso.
@@ -144,6 +151,7 @@ def curriculo(codigo, nivel='graduacao'):
     nivel -- nível acadêmico do curso: graduacao ou posgraduacao.
              (default graduacao)
     """
+
     try:
         curriculo_url = url_mweb(nivel, 'curriculo', codigo)
         lib = Browser()
@@ -171,20 +179,3 @@ def curriculo(codigo, nivel='graduacao'):
     finally:
         lib.driver.close()
     return curriculo
-
-
-# cursos_ = cursos()
-# for c in cursos_:
-#     print c, cursos_[c]
-
-# d = disciplina(181196)
-# for c in d:
-#     print c, d[c]
-
-# oferta = habilitacao(680)
-# for h in oferta:
-#     print h, oferta[h]
-
-# periodos = fluxo(6912)  # 1856)
-# for p in periodos:
-#     print "Período ", p, periodos[p]
