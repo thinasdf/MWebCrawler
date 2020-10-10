@@ -1,7 +1,8 @@
 # modificar a funcao cursos para pegar automaticamente o titulo da coluna
+# departamentos
+# criar objetos: disciplina, departamento, curso, curriculo, habilitacao
 # montar grafo de dependencias das disciplinas
-
-
+# mostrar de quantos cursos uma disciplina faz parte; disciplinas que estao em mais cursos
 
 
 
@@ -133,6 +134,44 @@ def habilitacao(codigo, nivel='graduacao'):
     finally:
        lib.driver.close()
     return habilitacao
+
+def curriculo(codigo, nivel='graduacao'):
+    """Acessa o Matrícula Web e retorna a lista de
+    disciplinas definidas no curriculo do curso.
+
+    Argumentos:
+    codigo -- o código da habilitacao.
+    nivel -- nível acadêmico do curso: graduacao ou posgraduacao.
+             (default graduacao)
+    """
+    try:
+        curriculo_url = url_mweb(nivel, 'curriculo', codigo)
+        lib = Browser()
+        #lib.open_chrome_browser(curriculo_url)
+        lib.open_headless_chrome_browser(curriculo_url)
+        main_locator = 'xpath://div[@class="body table-responsive"]'
+        main_table = lib.find_element(main_locator)
+
+        tipo_list = main_table.find_elements_by_xpath('//div[@class="panel panel-primary"]')
+        tipo_list = [item.text for item in tipo_list]
+
+        table_list = main_table.find_elements_by_class_name('table-responsive')[1:]
+
+        curriculo = []
+        for tipo, table in zip(tipo_list, table_list):
+            lines = table.find_elements_by_tag_name('tr')
+            titles = [item.text for item in lines[0].find_elements_by_tag_name('th')]
+            for line_element in lines[1:]:
+                line = [item.text for item in line_element.find_elements_by_tag_name('td')]
+                disciplina = dict(zip(titles, line))
+                disciplina['Tipo'] = tipo
+                curriculo.append(disciplina)
+    except:
+        print('erro em curriculo')
+    finally:
+        lib.driver.close()
+    return curriculo
+
 
 
 def fluxo(codigo, nivel='graduacao'):
