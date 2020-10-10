@@ -7,7 +7,7 @@
 from requests import get as busca
 from requests.exceptions import RequestException as RequestException
 from re import findall as encontra_padrao
-#from re import DOTALL
+#from re import match
 
 
 # Construção de links para o Matrícula Web.

@@ -1,10 +1,20 @@
 import curso
 
-cursos = curso.cursos()
-for c in cursos:
-    print(c, cursos[c])
+# Testa Cursos
+# cursos = curso.cursos()
+# for item in cursos:
+#     print(item, cursos[item])
 
 
-# d = curso.disciplina(100854)
-# for c in d:
-#     print(c, '\n', '\t', d[c])
+# # Testa Disciplina
+# disciplina = curso.disciplina(100854)
+# for item in disciplina:
+#     print(item + ':', '\t', disciplina[item][:200] + '...')
+
+
+# Testa Habilitação
+habilitacao = curso.habilitacao(1422)
+for opcao, items in habilitacao.items():
+    print('Habilitação:', opcao)
+    for item in items:
+        print('\t' + item + ':', '\t', items[item])

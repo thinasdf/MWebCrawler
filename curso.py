@@ -1,3 +1,10 @@
+# modificar a funcao cursos para pegar automaticamente o titulo da coluna
+# montar grafo de dependencias das disciplinas
+
+
+
+
+
 #  -*- coding: utf-8 -*-
 #       @file: curso.py
 #     @author: Guilherme N. Ramos (gnramos@unb.br)
@@ -11,8 +18,10 @@
 
 from RPA.Browser import Browser
 from utils import *
+import re
 
-def cursos(codigo='\d+', nivel='graduacao', campus=DARCY_RIBEIRO):
+
+def cursos(nivel='graduacao', campus=DARCY_RIBEIRO):
     """Acessa o Matrícula Web e retorna um dicionário com a lista de cursos.
     Argumentos:
     nivel -- nível acadêmico dos cursos: graduacao ou posgraduacao.
@@ -20,10 +29,7 @@ def cursos(codigo='\d+', nivel='graduacao', campus=DARCY_RIBEIRO):
     campus -- o campus onde o curso é oferecido: DARCY_RIBEIRO, PLANALTINA,
               CEILANDIA ou GAMA
               (default DARCY_RIBEIRO)
-
     """
-
-    locator_cursos = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr[position()>1]'
 
     url_cursos = url_mweb(nivel, 'curso_rel', campus)
     lib = Browser()
@@ -32,6 +38,7 @@ def cursos(codigo='\d+', nivel='graduacao', campus=DARCY_RIBEIRO):
 
     list_cursos = {}
     try:
+        locator_cursos = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr[position()>1]'
         for element in lib.find_elements(locator_cursos):
             row = [item.text for item in element.find_elements_by_tag_name('td')]
             modalidade, codigo, denominacao, turno = row
@@ -40,64 +47,46 @@ def cursos(codigo='\d+', nivel='graduacao', campus=DARCY_RIBEIRO):
             list_cursos[codigo]['Denominação'] = denominacao
             list_cursos[codigo]['Turno'] = turno
 
-    except RequestException as erro:
-        pass
+    except: #RequestException as erro:
+        print('erro em cursos')
         # print 'Erro ao buscar %s para %s em %d.\n%s' %
         #     (codigo, nivel, campus, erro)
     finally:
         lib.driver.close()
+
     return list_cursos
 
 
 def disciplina(codigo, nivel='graduacao'):
-    """Acessa o Matrícula Web e retorna um dicionário com as informações da
-    disciplina.
+    url_disciplinas = url_mweb(nivel, 'disciplina', codigo)
+    #print(url_disciplinas)
 
-    Argumentos:
-    codigo -- o código da disciplina.
-    nivel -- nível acadêmico da disciplina: graduacao ou posgraduacao.
-             (default graduacao)
-    """
+    lib = Browser()
+    #lib.open_chrome_browser(url_disciplinas)
+    lib.open_headless_chrome_browser(url_disciplinas)
 
-    disciplina_parse_info = {
-        'Departamento':     {'pattern': '<tr><th class=[^>]*>Órgão</th><td class=[^>]*>([^<]*)</td></tr>'},
-        'Denominação':      {'pattern': '<tr><th>Denominação</th><td>([^<]*)</td></tr>'},
-        'Nivel':            {'pattern': '<tr><th>Nível</th><td>([^<]*)</td></tr>'},
-        'Vigência':         {'pattern': '<tr><th>Início da Vigência em</th><td>([^<]*)</td></tr>'},
-        'Pré-requisitos':   {'pattern': '<tr><th>Pré-requisitos</th><td>(.*?)</td></tr>',
-                             'replace': [['<br>', ' ']]},
-        'Ementa':           {'pattern':
-                                 '<tr><th rowspan=[^>]*>Ementa</th><td>Início da Vigência em <b>[^<]+</b></td></tr>'
-                                 '<tr><td><p align=\w+>(.*?)</td></tr>',
-                             'replace': [['<br />', '\n']]},
-        'Programa':         {'pattern': '<tr><th rowspan=[^>]*>Programa</th><td>Início da Vigência em <b>[^<]+</b>'
-                                        '</td></tr><tr><td><p align=\w+>(.*?)</td></tr>',
-                             'replace': [['<br />', '\n']]},
-        'Bibliografia':     {'pattern':
-                                 '<tr><th rowspan=[^>]*>Bibliografia</th><td>Início da Vigência em <b>[^<]+</b></td>'
-                                 '</tr><tr><td><p align=\w+>(.*?)</td></tr>',
-                             'replace': [['<br />', '\n']]}
-    }
-
-    disc = {}
+    disciplina = {}
     try:
-        pagina_html = busca(url_mweb(nivel, 'disciplina', codigo))
-        content = pagina_html.content.decode('utf-8')
-        content = content.replace('\n', '')
-        content = content.replace('\r', '')
-        for item, info in disciplina_parse_info.items():
-            pattern = info['pattern']
-            text = encontra_padrao(pattern, content)[0]
-            if 'replace' in info:
-                for r in info['replace']:
-                    text = text.replace(r[0], r[1])
-            disc[item] = text
-            # replace_tags
-    except RequestException as erro:
-        pass
+        locator_disciplinas = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr'
+        for element in lib.find_elements(locator_disciplinas):
+            th = element.find_elements_by_tag_name('th')
+            td = element.find_element_by_tag_name('td')
+            value = td.text
+            if len(th) > 0:
+                title = th[0].text
+                disciplina[title] = value
+            else:
+                # no caso de o th tiver o rowspan > 1, na proxima linha vem vazio.
+                # entao repete o titulo e adicona o conteudo
+                # assume que no inicio do loop encontra um th
+                disciplina[title] += '\n' + value
+    except: # RequestException as erro:
+        print('erro em disciplina')
         # print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
+    finally:
+        lib.driver.close()
 
-    return disc
+    return disciplina
 
 
 def habilitacao(codigo, nivel='graduacao'):
@@ -109,47 +98,34 @@ def habilitacao(codigo, nivel='graduacao'):
     nivel -- nível acadêmico do curso: graduacao ou posgraduacao.
              (default graduacao)
     """
-    OPCAO = '<a href=curriculo.aspx\?cod=(\d+)>' \
-            '.*?' \
-            'Grau: </td><td .*?>(\w+)</td>' \
-            '.*?' \
-            'Limite mínimo de permanência: </td>' \
-            '<td align=right>(\d+)</td>' \
-            '.*?' \
-            'Limite máximo de permanência: </td>' \
-            '<td align=right>(\d+)</td>' \
-            '.*?' \
-            'Quantidade de Créditos para Formatura: </td>' \
-            '<td align=right>(\d+)</td>' \
-            '.*?' \
-            'Quantidade mínima de Créditos Optativos ' \
-            'na Área de Concentração: </td>' \
-            '<td align=right>(\d+)</td>' \
-            '.*?' \
-            'Quantidade mínima de Créditos Optativos na Área Conexa: </td>' \
-            '<td align=right>(\d+)</td>' \
-            '.*?' \
-            'Quantidade máxima de Créditos no Módulo Livre: </td>' \
-            '<td align=right>(\d+)</td>'
 
-    curso = {}
+    habilitacao_url = url_mweb(nivel, 'curso_dados', codigo)
+    lib = Browser()
+    #print(habilitacao_url)
+    #lib.open_chrome_browser(habilitacao_url)
+    lib.open_headless_chrome_browser(habilitacao_url)
+
+    habilitacao = {}
     try:
-        pagina_html = busca(url_mweb(nivel, 'curso_dados', codigo))
-        oferta = encontra_padrao(OPCAO, pagina_html.content.decode('utf-8'))
-        for opcao, grau, min, max, formatura, obr, opt, livre in oferta:
-            curso[opcao] = {}
-            curso[opcao]['Grau'] = grau
-            curso[opcao]['Limite mínimo de permanência'] = min
-            curso[opcao]['Limite máximo de permanência'] = max
-            curso[opcao]['Quantidade de Créditos para Formatura'] = formatura
-            curso[opcao]['Quantidade mínima de Créditos Optativos na Área de Concentração'] = obr
-            curso[opcao]['Quantidade mínima de Créditos Optativos na Área Conexa'] = opt
-            curso[opcao]['Quantidade máxima de Créditos no Módulo Livre'] = livre
-    except RequestException as erro:
-        pass
-        # print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
+        opcao_locator = 'xpath:/html/body/section//div[@class="body table-responsive"]/div[1]/a'
+        opcao_url = lib.find_element(opcao_locator).get_property("href")
+        opcao_match = re.search('=(\d+)$', opcao_url)
+        opcao = opcao_match.group(1)
+        habilitacao[opcao] = {}
 
-    return oferta
+        habilitacao_locator = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr'
+        for element in lib.find_elements(habilitacao_locator):
+            th = element.find_element_by_tag_name('th')
+            td = element.find_element_by_tag_name('td')
+            title = th.text
+            value = td.text
+            habilitacao[opcao][title] = value
+    except: # RequestException as erro:
+        print('erro em habilitacao')
+        #print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
+    finally:
+       lib.driver.close()
+    return habilitacao
 
 
 def fluxo(codigo, nivel='graduacao'):
