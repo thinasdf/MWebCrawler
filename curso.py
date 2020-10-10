@@ -98,7 +98,7 @@ def habilitacao(codigo, nivel='graduacao'):
     nivel -- nível acadêmico do curso: graduacao ou posgraduacao.
              (default graduacao)
     """
-
+# precisa modificar para reconhecer mais de uma habilitacao
     habilitacao_url = url_mweb(nivel, 'curso_dados', codigo)
     lib = Browser()
     #print(habilitacao_url)
@@ -106,25 +106,32 @@ def habilitacao(codigo, nivel='graduacao'):
     lib.open_headless_chrome_browser(habilitacao_url)
 
     habilitacao = {}
-    try:
-        opcao_locator = 'xpath:/html/body/section//div[@class="body table-responsive"]/div[1]/a'
-        opcao_url = lib.find_element(opcao_locator).get_property("href")
+    # try:
+    opcao_locator = 'xpath:/html/body/section//div[@class="body table-responsive"]//a'
+    opcao_list = []
+    for item in lib.find_elements(opcao_locator):
+        opcao_url = item.get_property("href")
         opcao_match = re.search('=(\d+)$', opcao_url)
         opcao = opcao_match.group(1)
-        habilitacao[opcao] = {}
+        #habilitacao[opcao] = {}
+        opcao_list.append(opcao)
 
-        habilitacao_locator = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr'
-        for element in lib.find_elements(habilitacao_locator):
-            th = element.find_element_by_tag_name('th')
-            td = element.find_element_by_tag_name('td')
+    table_locator = 'xpath:/html/body/section//table[@id="datatable"]'
+    table_list = lib.find_elements(table_locator)
+
+    for opcao, table in zip(opcao_list, table_list):
+        habilitacao[opcao] = {}
+        for line in table.find_elements_by_tag_name('tr'):
+            th = line.find_element_by_tag_name('th')
+            td = line.find_element_by_tag_name('td')
             title = th.text
             value = td.text
             habilitacao[opcao][title] = value
-    except: # RequestException as erro:
-        print('erro em habilitacao')
-        #print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
-    finally:
-       lib.driver.close()
+    # except: # RequestException as erro:
+    #     print('erro em habilitacao')
+    #     #print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
+    # finally:
+    #    lib.driver.close()
     return habilitacao
 
 

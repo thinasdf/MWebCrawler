@@ -13,7 +13,7 @@ import curso
 
 
 # Testa Habilitação
-habilitacao = curso.habilitacao(1422)
+habilitacao = curso.habilitacao(264)
 for opcao, items in habilitacao.items():
     print('Habilitação:', opcao)
     for item in items:
