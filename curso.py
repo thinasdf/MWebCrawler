@@ -173,33 +173,6 @@ def curriculo(codigo, nivel='graduacao'):
     return curriculo
 
 
-
-def fluxo(codigo, nivel='graduacao'):
-    """Acessa o Matrícula Web e retorna um dicionário com a lista de
-    disciplinas por período definidas no fluxo do curso.
-
-    Argumentos:
-    codigo -- o código do curso.
-    nivel -- nível acadêmico do curso: graduacao ou posgraduacao.
-             (default graduacao)
-    """
-    PERIODO = '<b>PERÍODO: (\d+).*?CRÉDITOS:</b> (\d+)</td>(.*?)</tr></table>'
-    DISCIPLINA = 'disciplina.aspx\?cod=\d+>(\d+)</a>'
-
-    curso = {}
-    try:
-        pagina_html = busca(url_mweb(nivel, 'fluxo', codigo))
-        oferta = encontra_padrao(PERIODO, pagina_html.content.decode('utf-8'))
-        for periodo, creditos, dados in oferta:
-            curso[periodo] = {}
-            curso[periodo]['Créditos'] = creditos
-            curso[periodo]['Disciplinas'] = encontra_padrao(DISCIPLINA, dados)
-    except RequestException as erro:
-        pass
-        # print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
-
-    return curso
-
 # cursos_ = cursos()
 # for c in cursos_:
 #     print c, cursos_[c]
