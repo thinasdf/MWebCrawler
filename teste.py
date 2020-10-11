@@ -1,9 +1,10 @@
 import curso
+import oferta
 
 #Testa Cursos
-cursos = curso.cursos()
-for item in cursos:
-    print(item, cursos[item])
+# cursos = curso.cursos()
+# for item in cursos:
+#     print(item, cursos[item])
 
 
 # # Testa Disciplina
@@ -24,3 +25,17 @@ for item in cursos:
 # curriculo = curso.curriculo(3841)
 # for disciplina in curriculo:
 #     print(disciplina)
+
+
+# # Testa Departamentos
+# departamentos = oferta.departamentos()
+# for codigo in departamentos:
+#     print(codigo)
+#     print('\t', departamentos[codigo])
+
+
+# # Testa disciplinas do departamento
+disciplinas = oferta.disciplinas('383')
+for d in disciplinas:
+    print(d)
+    print('\t', disciplinas[d])

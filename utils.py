@@ -9,6 +9,7 @@
 #from re import findall as encontra_padrao
 #from re import match
 from RPA.Browser import Browser
+from objects import *
 
 # Construção de links para o Matrícula Web.
 mweb = lambda nivel: 'https://matriculaweb.unb.br/' + str(nivel)
