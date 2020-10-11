@@ -26,55 +26,27 @@ def departamentos(nivel='graduacao', campus=DARCY_RIBEIRO):
     """
 
     departamentos_url = url_mweb(nivel, 'oferta_dep', campus)
-    lib = Browser()
-    #lib.open_chrome_browser(departamentos_url)
-    lib.open_headless_chrome_browser(departamentos_url)
-    departamentos = {}
-    try:
-        table_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
-        table_elements = lib.find_elements(table_locator)
-
-        titles = [item.text for item in table_elements[0].find_elements_by_tag_name('th')]
-        codigo_idx = 0  # índice do código do departamento
-        del titles[codigo_idx]
-
-        for element in table_elements[1:]:
-            line = [item.text for item in element.find_elements_by_tag_name('td')]
-            codigo = line.pop(codigo_idx)
-            departamentos[codigo] = dict(zip(titles, line))
-    except:
-        print('erro em departamentos')
-    finally:
-        lib.driver.close()
+    table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
+    departamentos = table_to_dict(departamentos_url, table_lines_locator, key_index=0)
     return departamentos
 
 
-def disciplinas(dept=116, nivel='graduacao'):
+def disciplinas(dept, nivel='graduacao'):
     """Acessa o Matrícula Web e retorna um dicionário com a lista de
     disciplinas ofertadas por um departamento.
 
     Argumentos:
     dept -- o código do Departamento que oferece as disciplinas
-            (default 116)
     nivel -- nível acadêmico das disciplinas buscadas: graduacao ou
              posgraduacao.
              (default graduacao)
-
-    Lista completa dos Departamentos da UnB:
-    matriculaweb.unb.br/matriculaweb/graduacao/oferta_dep.aspx?cod=1
     """
-    DISCIPLINAS = 'oferta_dados.aspx\?cod=(\d+).*?>(.*?)</a>'
 
-    oferta = {}
-    try:
-        pagina_html = busca(url_mweb(nivel, 'oferta_dis', dept))
-        ofertadas = encontra_padrao(DISCIPLINAS, pagina_html.content)
-        for codigo, nome in ofertadas:
-            oferta[codigo] = nome
-    except RequestException as erro:
-        pass
-        # print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
-
+    ofertadas_url = url_mweb(nivel, 'oferta_dis', dept)
+    table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
+    print(ofertadas_url)
+    oferta = table_to_dict(ofertadas_url, table_lines_locator, key_index=0)
+    print(len(oferta))
     return oferta
 
 

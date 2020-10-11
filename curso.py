@@ -1,4 +1,3 @@
-# departamentos
 # criar objetos: disciplina, departamento, curso, curriculo, habilitacao
 # montar grafo de dependencias das disciplinas
 # mostrar de quantos cursos uma disciplina faz parte; disciplinas que estao em mais cursos
@@ -16,7 +15,6 @@
 #
 # Erros em requests são ignorados silenciosamente.
 
-from RPA.Browser import Browser
 from utils import *
 import re
 
@@ -32,27 +30,8 @@ def cursos(nivel='graduacao', campus=DARCY_RIBEIRO):
     """
 
     url_cursos = url_mweb(nivel, 'curso_rel', campus)
-    lib = Browser()
-    #lib.open_chrome_browser(url_cursos)
-    lib.open_headless_chrome_browser(url_cursos)
-
-    cursos = {}
-    try:
-        table_locator = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr'
-        table_elements = lib.find_elements(table_locator)
-
-        titles = [item.text for item in table_elements[0].find_elements_by_tag_name('th')]
-        del titles[1] # codigo do curso
-
-        for element in table_elements[1:]:
-            line = [item.text for item in element.find_elements_by_tag_name('td')]
-            codigo = line.pop(1)
-            cursos[codigo] = dict(zip(titles, line))
-    except:
-        print('erro em cursos')
-    finally:
-        lib.driver.close()
-
+    table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
+    cursos = table_to_dict(url_cursos, table_lines_locator, key_index=1)
     return cursos
 
 
@@ -108,8 +87,6 @@ def habilitacao(codigo, nivel='graduacao'):
 
     habilitacao_url = url_mweb(nivel, 'curso_dados', codigo)
     lib = Browser()
-    #print(habilitacao_url)
-    #lib.open_chrome_browser(habilitacao_url)
     lib.open_headless_chrome_browser(habilitacao_url)
 
     habilitacao = {}
