@@ -1,30 +1,61 @@
 #  -*- coding: utf-8 -*-
 #       @file: utils.py
 #     @author: Guilherme N. Ramos (gnramos@unb.br)
+#     @author: Thiago S. Nascimento
 #
 # Utilidades.
 
-#from requests import get as busca
-#from requests.exceptions import RequestException as RequestException
-#from re import findall as encontra_padrao
-#from re import match
 from RPA.Browser import Browser
 from objects import *
 
-# Construção de links para o Matrícula Web.
-mweb = lambda nivel: 'https://matriculaweb.unb.br/' + str(nivel)
-link = lambda pagina, cod: str(pagina) + '.aspx?cod=' + str(cod)
-url_mweb = lambda nivel, pagina, cod: mweb(nivel) + '/' + link(pagina, cod)
+
+# Códigos dos campi
+DARCY_RIBEIRO = 1
+PLANALTINA = 2
+CEILANDIA = 3
+GAMA = 4
+
+
+def url_mweb(nivel, pagina, cod):
+    """
+    Constrói links para o Matrícula Web
+
+    Parameters
+    ----------
+    nivel : str
+        Nível do ensino: graduacao ou posgraduacao
+    pagina : str
+        Nome da pagina, p. ex. : disciplina, oferta_dep, oferta_dis, curso_dados, curriculo
+    cod : str
+        Código do item
+
+    Returns
+    -------
+    str
+        URL
+    """
+
+    url = f'https://matriculaweb.unb.br/{nivel}/{pagina}.aspx?cod={str(cod)}'
+
+    return url
 
 
 def table_to_dict(web_url, table_lines_locator, key_index=0):
     """Acessa uma página, localiza uma tabela e a retorna como um dicionário.
 
-    Argumentos:
-    web_url -- o código do Departamento que oferece as disciplinas.
-    table_lines_locator -- XPath Locator string.
-    key_index -- índice da coluna que será usada como chave do dicionário.
-                 (default 0)
+    Parameters
+    ----------
+    web_url : str
+        Endereço da página que contém a tabela
+    table_lines_locator : str
+        XPath Locator da tabela
+    key_index : int, optional
+        Índice da coluna que será usada como chave do dicionário (default is 0)
+
+    Returns
+    -------
+    dict
+        Um dicionário contendo as linhas da tabela
     """
 
     lib = Browser()
@@ -48,8 +79,4 @@ def table_to_dict(web_url, table_lines_locator, key_index=0):
     return dict_object
 
 
-# Códigos dos campi
-DARCY_RIBEIRO = 1
-PLANALTINA = 2
-CEILANDIA = 3
-GAMA = 4
+
