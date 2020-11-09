@@ -63,6 +63,7 @@ def table_to_dict(web_url, table_lines_locator, key_index=0):
             line = [item.text for item in element.find_elements_by_tag_name('td')]
             key = line[key_index]
             dict_object[key] = dict(zip(titles, line))
+            # TODO: remover a coluna que será usada como chave dos values (key_index)
     except Exception as e:
         # FIXME: Especificar exceção
         print('erro em table_to_dict:', e)
@@ -75,6 +76,22 @@ def table_to_dict(web_url, table_lines_locator, key_index=0):
     finally:
         lib.driver.close()
     return dict_object
+    # TODO: tipefy dict key and values: codigos (int or str)
 
 
+def write_attributes(attr_mapping, obj_instance, attributes):
+    """
 
+    Parameters
+    ----------
+    attr_mapping : dict
+        A dictionary relating column names (as returned by the crawler) and the object properties names
+    obj_instance : Object
+        An instance of an Object
+    attributes : dict
+        The dictionary returned by the crawler
+    -------
+    """
+    for column_name, attribute_value in attributes.items():
+        property_name = attr_mapping[column_name]
+        setattr(obj_instance, property_name, attribute_value)

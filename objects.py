@@ -1,7 +1,10 @@
+# TODO: Usar IOBTree para todos, chave sendo sempre int e propriedade sendo str
+
 import persistent
 from utils import *
 import datetime
 from BTrees.IOBTree import IOBTree
+from BTrees.OOBTree import OOBTree
 import ZODB
 import ZODB.FileStorage
 import transaction
@@ -20,173 +23,303 @@ class UnB(persistent.Persistent):
     def __init__(self):
         self.campi = {}
         self.niveis = ['graduacao', 'posgraduacao']
-        self.departamentos = None
-        self.disciplinas = None
-        self.cursos = None
-        self.add_campi()
 
-    def add_campi(self):
+    def build(self):
+        self.set_campi()
+        transaction.commit()
+
+    def set_campi(self):
         value_map = {
-            1: 'DARCY_RIBEIRO',
-            2: 'PLANALTINA',
-            3: 'CEILANDIA',
-            4: 'GAMA'}
+            1: 'Darcy Ribeiro',
+            2: 'Planaltina',
+            3: 'Ceilândia',
+            4: 'Gama'}
 
         for codigo, denominacao in value_map.items():
-            campus = Campus()
-            campus.codigo = codigo
-            campus.denominacao = denominacao
+            campus = Campus(codigo, denominacao)
             self.campi[codigo] = campus
         transaction.commit()
 
+    def iter_disciplinas(self):
+        """
+        Returns
+        -------
+        A generator of Disciplina()
+        """
+        for campus in self.campi.values():
+            for departamento in campus.departamentos.departamentos.values():
+                for disciplina in departamento.disciplinas.disciplinas.values():
+                    yield disciplina
 
-class Campus(persistent.Persistent):
-    def __init__(self):
-        self.codigo = None
-        self.denominacao = None
-        self.last_updated_in = None
-        # TODO: Adicionar lista dos departamentos do campus? Departamentos sao da unb ou do campus?
+    def iter_departamentos(self):
+        """
+        Returns
+        -------
+        A generator of Departamentos()
+        """
+        for campus in self.campi.values():
+            for departamento in campus.departamentos.values():
+                yield departamento
 
+    def get_disciplina_by_codigo(self, codigo):
+        for campus in self.campi.values():
+            campus.get_disciplina_by_codigo(codigo)
 
-class Departamentos(persistent.Persistent):
-    def __init__(self):
-        self.departamentos = IOBTree()
-
-    def crawler(self, nivel, campus):
-        """Acessa o Matrícula Web e retorna um dicionário com a lista de
-        departamentos com ofertas.
+    def get_departamento_by_codigo(self, codigo):
+        """
 
         Parameters
         ----------
-        nivel : str, optional
-            Nível acadêmico do Departamento: graduacao ou posgraduacao (default is graduacao)
-        campus : str
-            O campus onde o curso é oferecido: DARCY_RIBEIRO,
-            PLANALTINA, CEILANDIA ou GAMA (default is DARCY_RIBEIRO)
+        codigo : str
+
+        Returns
+        -------
+        Departamento()
+
+        """
+
+        for campus in self.campi.values():
+            return campus.get_departamento_by_codigo(codigo)
+
+    def get_departamento_by_sigla(self, sigla):
+        """
+
+        Parameters
+        ----------
+        sigla : str
+
+        Returns
+        -------
+        Departamento()
+
+        """
+
+        for campus in self.campi.values():
+            return campus.get_departamento_by_sigla(sigla)
+
+    def get_curso_by_codigo(self):
+        pass
+
+
+
+class Campus(persistent.Persistent):
+    def __init__(self, codigo, denominacao):
+        self.codigo = codigo
+        self.denominacao = denominacao
+        self.last_updated_in = None
+        self.departamentos = OOBTree()
+        self.cursos = IOBTree()
+        self.set_departamentos()
+        self.set_cursos()
+
+    def crawler_cursos(self, nivel):
+        """Acessa a página Matrícula Web e retorna um dicionário com a lista de cursos.
 
         Returns
         -------
         dict
-            Um dicionário com os Departamentos. O código do Departamento é a chave.
+            Um dicionário contendo os cursos.
+            O código do curso é a chave.
+            FIXME: exemplo do dicionário: 052 {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
+        """
+
+        cursos_url = url_mweb(nivel, 'curso_rel', self.codigo)
+        table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
+        cursos = table_to_dict(cursos_url, table_lines_locator, key_index=1)
+        return cursos
+
+    def set_cursos(self):
+        """
+        Cria objetos de Curso() a partir do dicionário retornado pela função crawler_cursos()
+
+        Exemplo:
+        052 {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
+        """
+
+        mapping = {
+            'Modalidade': 'modalidade',
+            # 'Código': 'codigo',
+            'Denominação': 'denominacao',
+            'Turno': 'turno'}
+
+        for nivel in UnB().niveis:
+            cursos = self.crawler_departamentos(nivel)
+
+            for codigo, attributes in cursos.items():
+                codigo = int(codigo) # FIXME: remover quando tipificar saída do table_to_dict
+                if codigo not in self.cursos:
+                    curso = Curso(self, codigo)
+                    write_attributes(mapping, curso, attributes)
+                    self.cursos[codigo] = curso
+                    transaction.commit()
+
+    def crawler_departamentos(self, nivel):
+        """Acessa a página Matrícula Web e retorna um dicionário com a lista de departamentos.
+
+        Returns
+        -------
+        dict
+            Um dicionário contendo os departamentos.
+            O código do departamento é a chave.
             052 {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
         """
 
-        departamentos_url = url_mweb(nivel, 'oferta_dep', campus)
+        departamentos_url = url_mweb(nivel, 'oferta_dep', self.codigo)
         table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
         departamentos = table_to_dict(departamentos_url, table_lines_locator, key_index=0)
         return departamentos
 
-    def add_departamentos(self, nivel, campus):
+    def set_departamentos(self):
         """
-        Cria objetos de Departamento() e respectivas Disciplina()
-        a partir do dicionário retornado pelo crawler()
+        Cria objetos de Departamento() a partir do dicionário retornado pela função crawler_departamentos()
 
         Exemplo:
         052 {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
+        """
+
+        # TODO: pegar nome bonito do Departamento. Onde???
+
+        attr_mapping_rev = {
+            # 'codigo': 'Código',
+            'sigla': 'Sigla',
+            'denominacao': 'Denominação'}
+
+        for nivel in UnB().niveis:
+            departamentos = self.crawler_departamentos(nivel)
+            for codigo, attributes in departamentos:
+                if codigo not in self.departamentos:
+                    sigla = attributes[attr_mapping_rev['sigla']]
+                    denominacao = attributes[attr_mapping_rev['denominacao']]
+                    departamento = Departamento(self, codigo, sigla, denominacao)
+                    self.departamentos[departamento.codigo] = departamento
+                    transaction.commit()
+
+    def get_departamento_by_sigla(self, sigla):
+        """
+        Seleciona departamento a partir da sigla
 
         Parameters
         ----------
-        nivel : str
-            Graduação ('graduacao') ou Pós-graduação ('posgraduacao')
-        campus : Campus()
-            Campus
-        """
-
-        attribute_map = {
-            'Código': 'codigo',
-            'Sigla': 'sigla',
-            'Denominação': 'denominacao'}
-
-        # TODO: Pegar nome bonito do Departamento
-
-        departamentos = self.crawler(nivel=nivel, campus=campus.codigo)
-        for codigo in departamentos:
-            if codigo not in self.departamentos:
-                departamento = Departamento()
-
-                for key, value in departamentos[codigo].items():
-                    attribute = attribute_map[key]
-                    setattr(departamento, attribute, value)
-                departamento.last_updated_in = datetime.datetime.now()
-                departamento.campus = campus
-                departamento.disciplinas = self.get_disciplinas(departamento, nivel)
-                print('\t', departamento.codigo, '-', departamento.denominacao)
-                self.departamentos[int(departamento.codigo)] = departamento
-            transaction.commit()
-
-    def get_disciplinas(self, departamento, nivel):
-        # TODO: receber obj depto
-        """
-        Acessa o Matrícula Web e retorna um dicionário com a lista de
-        disciplinas ofertadas por um departamento.
-
-        Parameters
-        ----------
-        departamento : Departamento()
-            Departamento
-        nivel : str, optional
-            Nível acadêmico das disciplinas buscadas: graduacao ou
-                 posgraduacao (default graduacao)
+        sigla : str
+            Sigla do departamento
 
         Returns
         -------
-        list
-            lista de objetos do tipo Disciplina()
-
+        Departamento()
         """
 
-        ofertadas_url = url_mweb(nivel, 'oferta_dis', departamento.codigo)
-        table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
-        ofertadas = table_to_dict(ofertadas_url, table_lines_locator, key_index=0)
-
-        disciplinas = IOBTree()
-        # {int(k): v for k, v in ofertadas.items()}
-        for codigo in ofertadas:
-            ofertadas[codigo]['nivel'] = nivel
-            disciplinas[int(codigo)] = ofertadas[codigo]
-
-        return disciplinas
-
-    def get_departamento_by_sigla(self, sigla):
         for departamento in self.departamentos.values():
             if departamento.sigla == sigla:
                 return departamento
         return None
 
     def get_departamento_by_codigo(self, codigo):
-        for departamento in self.departamentos.values():
-            if departamento.codigo == codigo:
-                return departamento
-        return None
-
-
-class Departamento(persistent.Persistent):
-    def __init__(self):
-        self.codigo = None
-        self.sigla = None
-        self.denominacao = None
-        self.disciplinas = IOBTree()
-        self.campus = None
-        self.last_updated_in = None
-
-
-class Disciplinas(persistent.Persistent):
-    def __init__(self):
-        self.disciplinas = IOBTree()
-
-    def crawler(self, codigo, nivel):
-        """Acessa o Matrícula Web e retorna um dicionário com as informações da
-        disciplina.
+        """
+        Seleciona departamento a partir do código
 
         Parameters
         ----------
         codigo : str
-            o código da disciplina.
-        nivel : str
-            nível acadêmico da disciplina: graduacao ou posgraduacao
+            Código do departamento
+
+        Returns
+        -------
+        Departamento()
+        """
+        if codigo in self.departamentos:
+            return self.departamentos.get(codigo)
+        else:
+            return None
+
+    def get_disciplina_by_codigo(self, codigo):
+        for departamento in self.departamentos.values():
+            return departamento.get_disciplina_by_codigo(codigo)
+
+
+class Departamento(persistent.Persistent):
+    def __init__(self, campus, codigo, sigla, denominacao):
+        """
+        Parameters
+        ----------
+            campus : Campus()
+            codigo : str
+                string porque há departamentos com e sem 0 (zero) na frente
+            sigla : str
+            denominacao : str
         """
 
-        url_disciplinas = url_mweb(nivel, 'disciplina', codigo)
+        self.campus = campus
+        self.codigo = codigo
+        self.sigla = sigla
+        self.denominacao = denominacao
+
+        self.disciplinas = IOBTree()
+        self.set_disciplinas()
+        self.last_updated_in = datetime.datetime.now()
+
+    def crawler_oferta(self, nivel):
+        oferta_url = url_mweb(nivel, 'oferta_dis', self.codigo)
+        table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
+        oferta = table_to_dict(oferta_url, table_lines_locator, key_index=0)
+        return oferta
+
+    def set_disciplinas(self):
+        """
+        Acessa a página do Matrícula Web, extrai as disciplinas ofertadas pelo departamento,
+        cria objetos Disciplina() e adiciona na IOBTree
+        """
+        for nivel in UnB().niveis:
+            oferta = self.crawler_oferta(nivel)
+            for codigo in oferta:
+                codigo = int(codigo) # FIXME: remover quando tipificar saída do table_to_dict
+                disciplina = Disciplina(codigo, nivel)
+                disciplina.set_disciplina()
+                self.disciplinas[codigo] = disciplina
+        transaction.commit()
+
+    def get_disciplina_by_codigo(self, codigo):
+        if codigo in self.disciplinas:
+            return self.disciplinas.get(codigo)
+        else:
+            return None
+
+class Disciplina(persistent.Persistent):
+    def __init__(self, codigo, nivel, departamento):
+        """
+        Constrói objeto Disciplina()
+
+        Parameters
+        ----------
+        codigo : int
+            Código da disciplina
+        nivel : str
+            Graduação ('graduacao') ou Pós-graduação ('posgraduacao')
+        departamento : Departamento()
+        """
+        self.codigo = codigo
+        self.nivel = nivel
+        self.departamento = departamento
+        self.denominacao = None
+        self.creditos = {'Teor': 0, 'Prat': 0, 'Ext': 0, 'Est': 0}
+        self.vigencia = None
+        self.pre_requisitos = []
+        self.ementa = None
+        self.programa = None
+        self.bibliografia = []
+        self.last_updated_in = None
+        self.set_disciplina()
+        self.last_updated_in = datetime.datetime.now()
+
+    def crawler_disciplina(self):
+        """Acessa a página Matrícula Web e retorna um dicionário com as informações da disciplina.
+
+        Returns
+        -------
+        dict
+            Dicionario com os atributos da disciplina
+        """
+
+        url_disciplinas = url_mweb(self.nivel, 'disciplina', self.codigo)
         lib = Browser()
         lib.open_headless_chrome_browser(url_disciplinas)
 
@@ -213,23 +346,17 @@ class Disciplinas(persistent.Persistent):
             lib.driver.close()
         return disciplina
 
-    def add_disciplina(self, codigo, nivel):
+    def set_disciplina(self):
         """
-        Usa o dicionário retornado pelo crawler() para cria um objeto Disciplina()
-
-        Exemplo:
-
-
+        Usa o dicionário retornado pelo crawler() para preencher os atributos da disciplina
         """
 
-        # TODO: Verifica se a disciplina já existe no banco antes de adicionar (usar flag overwrite)
-        disciplina_dict = self.crawler(codigo, nivel)
-        disciplina = Disciplina()
+        disciplinas = self.crawler_disciplina()
 
-        attribute_map = {
+        attr_mapping = {
             'Órgão': 'departamento',
-            'Código': 'codigo',
-            'Denominação': 'denominacao',
+            # 'Código': 'codigo',
+            # 'Denominação': 'denominacao',
             'Nível': 'nivel',
             'Início da Vigência em': 'vigencia',
             'Pré-requisitos': 'pre_requisitos',
@@ -237,13 +364,9 @@ class Disciplinas(persistent.Persistent):
             'Ementa': 'ementa',
             'Programa': 'programa'}
 
-        for key, value in disciplina_dict.items():
-            attribute = attribute_map[key]
-            setattr(disciplina, attribute, value)
-        disciplina.last_updated_in = datetime.datetime.now()
-        # TODO: Adicionar o objeto departamento ao inves da string
-        self.disciplinas[int(disciplina.codigo)] = disciplina
-        return disciplina
+        write_attributes(attr_mapping, self, disciplinas)
+
+        transaction.commit()
 
     def __repr__(self):
         representation = \
@@ -254,34 +377,31 @@ class Disciplinas(persistent.Persistent):
         return representation
 
 
-class Disciplina(persistent.Persistent):
-    def __init__(
-        self
-    ):
-        self.codigo = None
-        self.denominacao = None
-        self.departamento = None
-        self.creditos = {'Teor': 0, 'Prat': 0, 'Ext': 0, 'Est': 0}
-        self.nivel = None
-        self.vigencia = None
-        self.pre_requisitos = []
-        self.ementa = None
-        self.programa = None
-        self.bibliografia = []
-        self.last_updated_in = None
-
-
-class Cursos(persistent.Persistent):
-    def __init__(self):
-        self.cursos = IOBTree()
-
-
 class Curso(persistent.Persistent):
-    def __init__(self):
-        self.codigo = None
+    def __init__(self, campus, codigo):
+        """
+
+        Parameters
+        ----------
+        campus : Campus()
+        codigo : int
+        """
+
+        self.campus = campus
+        self.codigo = codigo
         self.grau = None
-        self.habilitacoes = []
+        self.modalidade = None
+        self.habilitacoes = {}
         self.last_updated_in = None
+
+    def crawler_habilitacoes(self):
+        # habilitacoes_url = url_mweb(nivel, 'curso_rel', self.codigo)
+        # table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
+        # habilitacoes = table_to_dict(habilitacoes_url, table_lines_locator, key_index=1)
+        return habilitacoes
+
+    def set_habilitacoes(self):
+        pass
 
 
 class Habilitacao(persistent.Persistent):
@@ -290,6 +410,11 @@ class Habilitacao(persistent.Persistent):
         self.curriculo = None
         self.last_updated_in = None
 
+    def crawler_curriculo(self):
+        pass
+
+    def set_curriculo(self):
+        pass
 
 class Curriculo(persistent.Persistent):
     def __init__(self):
@@ -297,58 +422,47 @@ class Curriculo(persistent.Persistent):
         self.disciplinas = []
         self.last_updated_in = None
 
-    # TODO: adicionar creditos da disciplina ao ler curriculo da habilitacao
+    def crawler_disciplinas(self):
+        pass
+
+    def set_disciplinas(self):
+        pass
+
+    # TODO: adicionar créditos da disciplina ao ler curriculo da habilitacao
 
 
 # TODO: mensagens de evolução das etapas
 
+class Clock:
+    def __init__(self):
+        self.start_time = datetime.datetime.now()
 
-def build_database(db_location):
-    # Create Database
-    connection = ZODB.connection(db_location)
-    root = connection.root
-
-    # Initialize
-    root.Unb = UnB()
-    root.Unb.disciplinas = Disciplinas()
-    root.Unb.cursos = Cursos()
-    root.Unb.departamentos = Departamentos()
-
-    # Finish
-    transaction.commit()
-    connection.close()
-
-    print('Database created at', db_location)
+    def get_duration(self):
+        now = datetime.datetime.now()
+        duration = now - self.start_time
+        return duration.total_seconds()/60
 
 
-def fill_database(db_location):
-    if not os.path.isfile(db_location):
-        build_database(db_location)
+class Main:
+    def __init__(self):
 
-    connection = ZODB.connection(db_location)
-    root = connection.root
+    @staticmethod
+    def build_database(db_location, overwrite=False):
+        clock = Clock()
+        exists = os.path.isfile(db_location)
 
-    # Cria os departamentos
-    print()
-    for nivel in root.Unb.niveis:
-        for campus in root.Unb.campi.values():
-            print('Criando departamentos de', nivel, 'do campus', campus.denominacao)
-            root.Unb.departamentos.add_departamentos(nivel, campus)
-            transaction.commit()
+        # Create connection
+        connection = ZODB.connection(db_location)
+        root = connection.root
 
-    # Cria as disciplinas no banco
-    # Reaponta as listas dos departamentos para os objetos de disciplina criados em banco
-    print('Criando disciplinas de cada departamento')
-    for departamento in root.Unb.departamentos.departamentos.values():
-        for key, disciplina in departamento.disciplinas.items():
-            nova_disciplina = root.Unb.disciplinas.add_disciplina(disciplina['Código'],
-                                                                  disciplina['nivel'])
-            departamento.disciplinas[key] = nova_disciplina
-            transaction.commit()
-        # print('\t Departamento', departamento.codigo, 'tem', len(departamento.disciplinas), 'disciplinas')
-        print('\t', len(departamento.disciplinas), 'disciplinas criadas em', departamento.denominacao)
+        if overwrite or not exists:
+            root.Unb = UnB()
+            root.Unb.build()
+            duration = None
+            print(f'Finished building database in {clock.get_duration()} minutes')
 
-    connection.close()
+        transaction.commit()
+        connection.close()
 
 
 def test():
@@ -356,40 +470,8 @@ def test():
     # TODO: Buscar atributos e objetos que ficaram vazios
 
 
-def corrige(db_location):
-    connection = ZODB.connection(db_location)
-    root = connection.root
-
-    # Cria as disciplinas no banco
-    # Reaponta as listas dos departamentos para os objetos de disciplina criados em banco
-    print('Criando disciplinas...')
-    for departamento in root.Unb.Departamentos.departamentos.values():
-        for key, disciplina in departamento.disciplinas.items():
-            nova_disciplina = root.Unb.Disciplinas.add_disciplina(disciplina['Código'],
-                                                                  disciplina['nivel'])
-            departamento.disciplinas[key] = nova_disciplina
-            transaction.commit()
-        print('\t Departamento', departamento.codigo, 'tem', len(departamento.disciplinas), 'disciplinas')
-    connection.close()
-
-
-def main():
-    # db_location = 'data/data.fs'
-    db_location = 'data/data_v10.fs'
-    fill_database(db_location)
-    # corrige(db_location)
-
-
 if __name__ == '__main__':
-    main()
+    main = Main()
+    db_location = 'data/data_v10.fs'
+    main.build_database(db_location, overwrite=True)
 
-
-import ZODB
-db_location = 'data/data_v10.fs'
-connection = ZODB.connection(db_location)
-root = connection.root
-deptos = {depto.departamento: depto for depto in root.Unb.departamentos.departamentos.values()}
-for k, disciplina in root.Unb.disciplinas.disciplinas.items():
-    sigla = disciplina.departamento.split(' ')[0]
-    disciplina.departamento = deptos[sigla]
-transaction.commit()
