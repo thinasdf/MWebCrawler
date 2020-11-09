@@ -1,5 +1,6 @@
 import curso
 import oferta
+from utils import *
 
 #Testa Cursos
 # cursos = curso.cursos()
@@ -35,7 +36,13 @@ import oferta
 
 
 # # Testa disciplinas do departamento
-disciplinas = oferta.disciplinas('383')
-for d in disciplinas:
-    print(d)
-    print('\t', disciplinas[d])
+# disciplinas = oferta.disciplinas('383')
+# for d in disciplinas:
+#     print(d)
+#     print('\t', disciplinas[d])
+
+
+nivel = 'graduacao'
+campus = DARCY_RIBEIRO
+url = url_mweb(nivel, 'oferta_dep', campus)
+print(url)

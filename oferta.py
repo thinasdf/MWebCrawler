@@ -13,43 +13,6 @@
 from utils import *
 
 
-def departamentos(nivel='graduacao', campus=DARCY_RIBEIRO):
-    """Acessa o Matrícula Web e retorna um dicionário com a lista de
-    departamentos com ofertas.
-
-    Argumentos:
-    nivel -- nível acadêmico do Departamento: graduacao ou posgraduacao.
-             (default graduacao)
-    campus -- o campus onde o curso é oferecido: DARCY_RIBEIRO, PLANALTINA,
-              CEILANDIA ou GAMA
-              (default DARCY_RIBEIRO)
-    """
-
-    departamentos_url = url_mweb(nivel, 'oferta_dep', campus)
-    table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
-    departamentos = table_to_dict(departamentos_url, table_lines_locator, key_index=0)
-    return departamentos
-
-
-def disciplinas(dept, nivel='graduacao'):
-    """Acessa o Matrícula Web e retorna um dicionário com a lista de
-    disciplinas ofertadas por um departamento.
-
-    Argumentos:
-    dept -- o código do Departamento que oferece as disciplinas
-    nivel -- nível acadêmico das disciplinas buscadas: graduacao ou
-             posgraduacao.
-             (default graduacao)
-    """
-
-    ofertadas_url = url_mweb(nivel, 'oferta_dis', dept)
-    table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
-    print(ofertadas_url)
-    oferta = table_to_dict(ofertadas_url, table_lines_locator, key_index=0)
-    print(len(oferta))
-    return oferta
-
-
 def lista_de_espera(codigo, turma='\w+', nivel='graduacao'):
     """Dado o código de uma disciplina, acessa o Matrícula Web e retorna um
     dicionário com a lista de espera para as turmas ofertadas da disciplina.

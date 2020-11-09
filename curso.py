@@ -1,6 +1,5 @@
-# criar objetos: disciplina, departamento, curso, curriculo, habilitacao
-# montar grafo de dependencias das disciplinas
-# mostrar de quantos cursos uma disciplina faz parte; disciplinas que estao em mais cursos
+# TODO: montar grafo de dependencias das disciplinas
+# TODO: mostrar de quantos cursos uma disciplina faz parte; disciplinas que estao em mais cursos
 
 
 
@@ -33,46 +32,6 @@ def cursos(nivel='graduacao', campus=DARCY_RIBEIRO):
     table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
     cursos = table_to_dict(url_cursos, table_lines_locator, key_index=1)
     return cursos
-
-
-def disciplina(codigo, nivel='graduacao'):
-    """Acessa o Matrícula Web e retorna um dicionário com as informações da
-    disciplina.
-    Argumentos:
-    codigo -- o código da disciplina.
-    nivel -- nível acadêmico da disciplina: graduacao ou posgraduacao.
-             (default graduacao)
-    """
-
-    url_disciplinas = url_mweb(nivel, 'disciplina', codigo)
-    #print(url_disciplinas)
-
-    lib = Browser()
-    #lib.open_chrome_browser(url_disciplinas)
-    lib.open_headless_chrome_browser(url_disciplinas)
-
-    disciplina = {}
-    try:
-        locator_disciplinas = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr'
-        for element in lib.find_elements(locator_disciplinas):
-            th = element.find_elements_by_tag_name('th')
-            td = element.find_element_by_tag_name('td')
-            value = td.text
-            if len(th) > 0:
-                title = th[0].text
-                disciplina[title] = value
-            else:
-                # no caso de o th tiver o rowspan > 1, na proxima linha vem vazio.
-                # entao repete o titulo e adicona o conteudo
-                # assume que no inicio do loop encontra um th
-                disciplina[title] += '\n' + value
-    except: # RequestException as erro:
-        print('erro em disciplina')
-        # print 'Erro ao buscar %s para %s.\n%s' % (codigo, nivel, erro)
-    finally:
-        lib.driver.close()
-
-    return disciplina
 
 
 def habilitacao(codigo, nivel='graduacao'):

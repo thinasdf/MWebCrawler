@@ -6,14 +6,6 @@
 # Utilidades.
 
 from RPA.Browser import Browser
-from objects import *
-
-
-# Códigos dos campi
-DARCY_RIBEIRO = 1
-PLANALTINA = 2
-CEILANDIA = 3
-GAMA = 4
 
 
 def url_mweb(nivel, pagina, cod):
@@ -35,7 +27,7 @@ def url_mweb(nivel, pagina, cod):
         URL
     """
 
-    url = f'https://matriculaweb.unb.br/{nivel}/{pagina}.aspx?cod={str(cod)}'
+    url = f'https://matriculaweb.unb.br/{nivel}/{pagina}.aspx?cod={cod}'
 
     return url
 
@@ -66,14 +58,20 @@ def table_to_dict(web_url, table_lines_locator, key_index=0):
         lines = lib.find_elements(table_lines_locator)
 
         titles = [item.text for item in lines[0].find_elements_by_tag_name('th')]
-        del titles[key_index]  # remove key element
 
         for element in lines[1:]:  # skip title row
             line = [item.text for item in element.find_elements_by_tag_name('td')]
-            key = line.pop(key_index)  # remove key element
+            key = line[key_index]
             dict_object[key] = dict(zip(titles, line))
-    except:
-        print('erro em table_to_dict')
+    except Exception as e:
+        # FIXME: Especificar exceção
+        print('erro em table_to_dict:', e)
+        print('\tweb_url:', web_url)
+        print('\ttable_lines_locator:', table_lines_locator)
+        # print('\tlines:', len(lines))
+        # print('\t:titles:', titles)
+        # print('\t:', )
+        # print('\t:', )
     finally:
         lib.driver.close()
     return dict_object
