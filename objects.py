@@ -113,12 +113,17 @@ class Campus(persistent.Persistent):
         self.set_cursos()
 
     def crawler_cursos(self, nivel):
-        """Acessa a página Matrícula Web e retorna um dicionário com a lista de cursos.
+        """Acessa a página Matrícula Web e retorna os cursos.
+
+        Parameters
+        ----------
+        nivel : {'graduacao', 'posgraduacao'}
+            Graduação ou Pós-Graduação.
 
         Returns
         -------
-        dict
-            Um dicionário contendo os cursos.
+        Union[dict, None]
+            Um dicionário contendo os cursos ou None, em caso de erro.
             O código do curso é a chave.
             FIXME: exemplo do dicionário:
             052 {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
@@ -145,23 +150,29 @@ class Campus(persistent.Persistent):
 
         for nivel in UnB().niveis:
             cursos = self.crawler_departamentos(nivel)
-
-            for codigo, attributes in cursos.items():
-                if codigo not in self.cursos:
-                    curso = Curso(self, codigo)
-                    write_attributes(mapping, curso, attributes)
-                    self.cursos[codigo] = curso
-                    transaction.commit()
+            if cursos:
+                for codigo, attributes in cursos.items():
+                    if codigo not in self.cursos:
+                        curso = Curso(self, codigo)
+                        write_attributes(mapping, curso, attributes)
+                        self.cursos[codigo] = curso
+                        transaction.commit()
 
     def crawler_departamentos(self, nivel):
-        """Acessa a página Matrícula Web e retorna um dicionário com a lista de departamentos.
+        """
+        Acessa a página Matrícula Web e retorna os departamentos do campus.
+
+        Parameters
+        ----------
+        nivel : {'graduacao', 'posgraduacao'}
+            Graduação ou Pós-Graduação.
 
         Returns
         -------
-        dict
-            Um dicionário contendo os departamentos.
+        Union[dict, None]
+            Um dicionário contendo os departamentos ou None, caso ocorra erro.
             O código do departamento é a chave.
-            052 {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
+            '052': {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
         """
 
         departamentos_url = url_mweb(nivel, 'oferta_dep', self.codigo)
@@ -186,13 +197,14 @@ class Campus(persistent.Persistent):
 
         for nivel in UnB().niveis:
             departamentos = self.crawler_departamentos(nivel)
-            for codigo, attributes in departamentos:
-                if codigo not in self.departamentos:
-                    sigla = attributes[attr_mapping_rev['sigla']]
-                    denominacao = attributes[attr_mapping_rev['denominacao']]
-                    departamento = Departamento(self, codigo, sigla, denominacao)
-                    self.departamentos[codigo] = departamento
-                    transaction.commit()
+            if departamentos:
+                for codigo, attributes in departamentos:
+                    if codigo not in self.departamentos:
+                        sigla = attributes[attr_mapping_rev['sigla']]
+                        denominacao = attributes[attr_mapping_rev['denominacao']]
+                        departamento = Departamento(self, codigo, sigla, denominacao)
+                        self.departamentos[codigo] = departamento
+                        transaction.commit()
 
     def get_departamento_by_sigla(self, sigla):
         """
@@ -239,6 +251,7 @@ class Campus(persistent.Persistent):
 class Departamento(persistent.Persistent):
     def __init__(self, campus, codigo, sigla, denominacao):
         """
+
         Parameters
         ----------
             campus : Campus()
@@ -258,6 +271,18 @@ class Departamento(persistent.Persistent):
         self.last_updated_in = datetime.datetime.now()
 
     def crawler_oferta(self, nivel):
+        """
+        Acessa a página Matrícula Web e retorna as disciplinas ofertadas pelo departamento.
+
+        Parameters
+        ----------
+        nivel : {'graduacao', 'posgraduacao'}
+            Graduação ou Pós-Graduação.
+
+        Returns
+        -------
+
+        """
         oferta_url = url_mweb(nivel, 'oferta_dis', self.codigo)
         table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
         oferta = table_to_dict(oferta_url, table_lines_locator, key_index=0)
@@ -265,16 +290,17 @@ class Departamento(persistent.Persistent):
 
     def set_disciplinas(self):
         """
-        Acessa a página do Matrícula Web, extrai as disciplinas ofertadas pelo departamento,
+        Acessa a página Matrícula Web, extrai as disciplinas ofertadas pelo departamento,
         cria objetos Disciplina() e adiciona na OOBTree
         """
         for nivel in UnB().niveis:
             oferta = self.crawler_oferta(nivel)
-            for codigo in oferta:
-                disciplina = Disciplina(self, nivel, codigo)
-                disciplina.set_disciplina()
-                self.disciplinas[codigo] = disciplina
-        transaction.commit()
+            if oferta:
+                for codigo in oferta:
+                    disciplina = Disciplina(self, nivel, codigo)
+                    disciplina.set_disciplina()
+                    self.disciplinas[codigo] = disciplina
+                    transaction.commit()
 
     def get_disciplina_by_codigo(self, codigo):
         if codigo in self.disciplinas:
@@ -286,14 +312,14 @@ class Departamento(persistent.Persistent):
 class Disciplina(persistent.Persistent):
     def __init__(self, departamento, nivel, codigo):
         """
-        Constrói objeto Disciplina()
+        Constrói objeto Disciplina().
 
         Parameters
         ----------
         codigo : str
-            Código da disciplina
-        nivel : str
-            Graduação ('graduacao') ou Pós-graduação ('posgraduacao')
+            Código da disciplina.
+        nivel : {'graduacao', 'posgraduacao'}
+            Graduação ou Pós-Graduação.
         departamento : Departamento()
         """
         self.codigo = codigo
@@ -311,20 +337,20 @@ class Disciplina(persistent.Persistent):
         self.last_updated_in = datetime.datetime.now()
 
     def crawler_disciplina(self):
-        """Acessa a página Matrícula Web e retorna um dicionário com as informações da disciplina.
+        """Acessa a página Matrícula Web e retorna as informações da disciplina.
 
         Returns
         -------
-        dict
-            Dicionario com os atributos da disciplina
+        Union[dict, None]
+            Dicionário com os atributos da disciplina ou None, caso ocorra erro.
         """
 
         url_disciplinas = url_mweb(self.nivel, 'disciplina', self.codigo)
         lib = Browser()
-        lib.open_headless_chrome_browser(url_disciplinas)
-
-        disciplina = {}
         try:
+            lib.open_headless_chrome_browser(url_disciplinas)
+            disciplina = {}
+
             locator_disciplinas = 'xpath:/html/body/section//table[@id="datatable"]/tbody/tr'
             for element in lib.find_elements(locator_disciplinas):
                 th = element.find_elements_by_tag_name('th')
@@ -334,39 +360,40 @@ class Disciplina(persistent.Persistent):
                     title = th[0].text
                     disciplina[title] = value
                 else:
-                    # caso a tag th tenha o rowspan > 1, na próxima linha vem vazio.
+                    # caso a tag th tenha o rowspan > 1, na próxima linha vem vazia.
                     # então repete o título e adiciona o conteúdo
                     # assume que no início do loop encontra um th
                     disciplina[title] += '\n' + value
+            return disciplina
         except Exception as e:
             # FIXME: especificar erro da exceção
-            print('erro em disciplina:', e)
-            transaction.abort()
+            print(f'Ao acessar a página {url_disciplinas} para buscar informações sobre a disciplina, '
+                  f'foi encontrado o seguinte erro: {e}')
+            return None
         finally:
             lib.driver.close()
-        return disciplina
 
     def set_disciplina(self):
         """
-        Usa o dicionário retornado pelo crawler() para preencher os atributos da disciplina
+        Preenche os atributos da disciplina.
         """
 
         disciplinas = self.crawler_disciplina()
+        if disciplinas:
+            attr_mapping = {
+                'Órgão': 'departamento',
+                # 'Código': 'codigo',
+                # 'Denominação': 'denominacao',
+                'Nível': 'nivel',
+                'Início da Vigência em': 'vigencia',
+                'Pré-requisitos': 'pre_requisitos',
+                'Bibliografia': 'bibliografia',
+                'Ementa': 'ementa',
+                'Programa': 'programa'}
 
-        attr_mapping = {
-            'Órgão': 'departamento',
-            # 'Código': 'codigo',
-            # 'Denominação': 'denominacao',
-            'Nível': 'nivel',
-            'Início da Vigência em': 'vigencia',
-            'Pré-requisitos': 'pre_requisitos',
-            'Bibliografia': 'bibliografia',
-            'Ementa': 'ementa',
-            'Programa': 'programa'}
+            write_attributes(attr_mapping, self, disciplinas)
 
-        write_attributes(attr_mapping, self, disciplinas)
-
-        transaction.commit()
+            transaction.commit()
 
     def __repr__(self):
         representation = \
@@ -389,6 +416,7 @@ class Curso(persistent.Persistent):
 
         self.campus = campus
         self.codigo = codigo
+        self.denominacao = None
         self.grau = None
         self.modalidade = None
         self.habilitacoes = {}
@@ -397,33 +425,53 @@ class Curso(persistent.Persistent):
         self.set_habilitacoes()
 
     def crawler_habilitacoes(self, nivel):
-        # TODO: Try, Except, Finally
-        lib = Browser()
+        """
+        Acessa a página Matrícula Web e retorna as habilitações do curso.
+
+        Parameters
+        ----------
+        nivel : {'graduacao', 'posgraduacao'}
+            Graduação ou Pós-Graduação.
+
+        Returns
+        -------
+        Union[dict, None]
+            Dicionário contendo as habilitações do curso ou None, caso ocorra erro.
+        """
         habilitacoes_url = url_mweb(nivel, 'curso_dados', self.codigo)
-        lib.open_headless_chrome_browser(habilitacoes_url)
+        lib = Browser()
+        try:
+            lib.open_headless_chrome_browser(habilitacoes_url)
+            main_table_locator = 'xpath:/html/body/section//div[@class="body table-responsive"]'
+            main_table_we = lib.find_element(main_table_locator)
 
-        main_table_locator = 'xpath:/html/body/section//div[@class="body table-responsive"]'
-        main_table_we = lib.find_element(main_table_locator)
+            curriculos_we = main_table_we.find_elements_by_partial_link_text('curriculo.aspx?cod=')
+            tables_we = main_table_we.find_elements_by_tag_name('table')
+            habilitacoes_we = dict(zip(curriculos_we, tables_we))
 
-        curriculos_we = main_table_we.find_elements_by_partial_link_text('curriculo.aspx?cod=')
-        tables_we = main_table_we.find_elements_by_tag_name('table')
-        habilitacoes_we = dict(zip(curriculos_we, tables_we))
+            habilitacoes = {}
+            for curriculo_we, table_we in habilitacoes_we:
+                # Codigo
+                match = re.match(r'\D+(\d+)$', curriculo_we.url)
+                codigo = match.group(1)
 
-        habilitacoes = {}
-        for curriculo_we, table_we in habilitacoes_we:
-            # Codigo
-            match = re.match(r'\D+(\d+)$', curriculo_we.url)
-            codigo = match.group(1)
+                # Table
+                titles = [th.text for th in table_we.find_elements_by_tag_name('th')]
+                values = [td.text for td in table_we.find_elements_by_tag_name('td')]
 
-            # Table
-            titles = [th.text for th in table_we.find_elements_by_tag_name('th')]
-            values = [td.text for td in table_we.find_elements_by_tag_name('td')]
-
-            habilitacoes[codigo] = dict(zip(titles, values))
-
-        return habilitacoes
+                habilitacoes[codigo] = dict(zip(titles, values))
+            return habilitacoes
+        except Exception as e:
+            # FIXME: especificar erro da exceção
+            print(f'Ao acessar a página {habilitacoes_url} para buscar habilitações '
+                  f'do curso de {self.denominacao}, '
+                  f'foi encontrado o seguinte erro: {e}')
+            return None
+        finally:
+            lib.driver.close()
 
     def set_habilitacoes(self):
+        # TODO: Verificar problema de habilitacoes na posgraduacao sem curriculo, ex: Geografia
         attr_mapping = {
             'Grau': 'grau',
             'Limite mínimo de permanência': 'permanencia_min',
@@ -439,39 +487,108 @@ class Curso(persistent.Persistent):
 
         for nivel in UnB().niveis:
             habilitacoes = self.crawler_habilitacoes(nivel)
-            for codigo, attributes in habilitacoes:
-                habilitacao = Habilitacao(self, nivel, codigo)
-                write_attributes(attr_mapping, habilitacao, attributes)
-                self.habilitacoes[codigo] = habilitacao
-                self.set_curriculo(nivel, habilitacao)
-                transaction.commit()
+            if habilitacoes:
+                for codigo, attributes in habilitacoes:
+                    habilitacao = Habilitacao(self, nivel, codigo)
+                    write_attributes(attr_mapping, habilitacao, attributes)
+                    self.habilitacoes[codigo] = habilitacao
+                    self.set_curriculo(nivel, habilitacao)
+                    transaction.commit()
 
-    def crawler_curriculo(self, nivel, codigo):
-        # TODO: Try, Except, Finally
-        lib = Browser()
+    def crawler_tables(self, nivel, codigo):
+        """
+        Acessa a página Matrícula Web e retorna as tabelas da habilitação.
+
+        Parameters
+        ----------
+        nivel : {'graduacao', 'posgraduacao'}
+            Graduação ou Pós-Graduação.
+        codigo : str
+            Código da habilitação
+
+        Returns
+        -------
+        Union[list, None]
+            Lista de dicionários das tabelas da habilitação ou None, caso ocorra erro.
+        """
+
         curriculo_url = url_mweb(nivel, 'curriculo', codigo)
-        lib.open_headless_chrome_browser(curriculo_url)
+        lib = Browser()
+        cadeias = []
+        try:
+            lib.open_headless_chrome_browser(curriculo_url)
+            tables_locator = 'xpath:/html/body/section//table[@id="datatable"]'
+            tables = lib.find_elements(tables_locator)
+            for table in tables:
+                lines = table.find_elements_by_tag_name('tr')
+                cadeia = lines_to_dict(lines, key_index=0)
+                cadeias.append(cadeia)
+            return cadeias
+        except Exception as e:
+            # FIXME: especificar erro da exceção
+            print(f'Ao acessar a página {curriculo_url} '
+                  'para buscar o curriculo do curso {self.denominacao}, '
+                  f'foi encontrado o seguinte erro: {e}')
+            return None
+        finally:
+            lib.driver.close()
 
-        tables_locator = 'xpath:/html/body/section//table[@id="datatable"]'
-        tables_we = lib.find_elements(tables_locator)
-        # TODO: pegar disciplinas das diferentes cadeias: tables_we[1:]
+    def set_curriculo(self, nivel, habilitacao):
+        """
+
+        Parameters
+        ----------
+        nivel : {'graduacao', 'posgraduacao'}
+            Graduação ou Pós-Graduação.
+        habilitacao : Habilitacao
+
+        """
+
+        tables = self.crawler_tables(nivel, habilitacao.codigo)
+
+        table_mapping = [
+            # {'tipo': 'curriculo', 'pos': 0},
+            {'tipo': 'obrigatoria', 'pos': 1},
+            {'tipo': 'obrigatoria_seletiva', 'pos': 2},
+            {'tipo': 'optativa', 'pos': 3}]
+
+        attr_mapping = {
+            'Código': 'codigo',
+            'Disciplina': 'disciplina',
+            'Créditos': 'creditos',
+            'Área': 'area'}
+
+        for table in tables:
+            pass
+
+        curriculo = Curriculo(habilitacao)
+
+
+
+        for mapping in table_mapping:
+            tipo = mapping['tipo']
+            pos = mapping['pos']
+            table = cadeias[pos]
+            disciplinas = lines_to_dict(table, key_index=0)
+            cadeia = Cadeia(curriculo, tipo)
         #
         # curriculos_we = main_table_we.find_elements_by_partial_link_text('curriculo.aspx?cod=')
         # tables_we = main_table_we.find_elements_by_tag_name('table')
         # habilitacoes_we = dict(zip(curriculos_we, tables_we))
 
-
-
         curriculo = {}
 
         return curriculo
 
-    def set_curriculo(self, nivel, habilitacao):
-        curriculo = Curriculo(habilitacao)
-        attributes = self.crawler_curriculo(nivel, habilitacao.codigo)
-        attr_mapping = {}  # TODO: Mapa de atributos
-        write_attributes(attr_mapping, curriculo, attributes)
-        # transaction.commit()
+
+
+
+
+        if attributes:
+
+            attr_mapping = {}  # TODO: Mapa de atributos
+            write_attributes(attr_mapping, curriculo, attributes)
+            # transaction.commit()
 
 
 class Habilitacao(persistent.Persistent):
