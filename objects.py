@@ -1,22 +1,19 @@
-# TODO: Usar IOBTree para todos, chave sendo sempre int e propriedade sendo str
+"""
+Todos os itens, exceto Departamento, tem códigos que poderiam ser armazenados como int.
+No entanto, há Departamentos com códigos do tipo 052, 19 e 383.
+Por isso os códigos sao todos armazenados como str, inclusive nas chaves das OOBTree.
+"""
 
 import persistent
 from utils import *
 import datetime
-from BTrees.IOBTree import IOBTree
 from BTrees.OOBTree import OOBTree
 import ZODB
 import ZODB.FileStorage
 import transaction
 import os
-
-
-"""
-Todos os itens, exceto Departamento, tem códigos que poderiam ser armazenados como int.
-Departamentos tem códigos do tipo 052, 19 e 383.
-Por isso os códigos sao todos armazenados como str, exceto nas chaves das IOBTree,
-onde são convertidos para str
-"""
+import re
+from collections import OrderedDict
 
 
 class UnB(persistent.Persistent):
@@ -27,6 +24,7 @@ class UnB(persistent.Persistent):
     def build(self):
         self.set_campi()
         transaction.commit()
+        self.set_pre_requisitos()
 
     def set_campi(self):
         value_map = {
@@ -39,6 +37,9 @@ class UnB(persistent.Persistent):
             campus = Campus(codigo, denominacao)
             self.campi[codigo] = campus
         transaction.commit()
+
+    def set_pre_requisitos(self):
+        pass  # TODO: Construir referências de pré-requisitos para cada disciplina
 
     def iter_disciplinas(self):
         """
@@ -101,14 +102,13 @@ class UnB(persistent.Persistent):
         pass
 
 
-
 class Campus(persistent.Persistent):
     def __init__(self, codigo, denominacao):
         self.codigo = codigo
         self.denominacao = denominacao
         self.last_updated_in = None
         self.departamentos = OOBTree()
-        self.cursos = IOBTree()
+        self.cursos = OOBTree()
         self.set_departamentos()
         self.set_cursos()
 
@@ -120,7 +120,8 @@ class Campus(persistent.Persistent):
         dict
             Um dicionário contendo os cursos.
             O código do curso é a chave.
-            FIXME: exemplo do dicionário: 052 {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
+            FIXME: exemplo do dicionário:
+            052 {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
         """
 
         cursos_url = url_mweb(nivel, 'curso_rel', self.codigo)
@@ -146,7 +147,6 @@ class Campus(persistent.Persistent):
             cursos = self.crawler_departamentos(nivel)
 
             for codigo, attributes in cursos.items():
-                codigo = int(codigo) # FIXME: remover quando tipificar saída do table_to_dict
                 if codigo not in self.cursos:
                     curso = Curso(self, codigo)
                     write_attributes(mapping, curso, attributes)
@@ -191,7 +191,7 @@ class Campus(persistent.Persistent):
                     sigla = attributes[attr_mapping_rev['sigla']]
                     denominacao = attributes[attr_mapping_rev['denominacao']]
                     departamento = Departamento(self, codigo, sigla, denominacao)
-                    self.departamentos[departamento.codigo] = departamento
+                    self.departamentos[codigo] = departamento
                     transaction.commit()
 
     def get_departamento_by_sigla(self, sigla):
@@ -253,7 +253,7 @@ class Departamento(persistent.Persistent):
         self.sigla = sigla
         self.denominacao = denominacao
 
-        self.disciplinas = IOBTree()
+        self.disciplinas = OOBTree()
         self.set_disciplinas()
         self.last_updated_in = datetime.datetime.now()
 
@@ -266,13 +266,12 @@ class Departamento(persistent.Persistent):
     def set_disciplinas(self):
         """
         Acessa a página do Matrícula Web, extrai as disciplinas ofertadas pelo departamento,
-        cria objetos Disciplina() e adiciona na IOBTree
+        cria objetos Disciplina() e adiciona na OOBTree
         """
         for nivel in UnB().niveis:
             oferta = self.crawler_oferta(nivel)
             for codigo in oferta:
-                codigo = int(codigo) # FIXME: remover quando tipificar saída do table_to_dict
-                disciplina = Disciplina(codigo, nivel)
+                disciplina = Disciplina(self, nivel, codigo)
                 disciplina.set_disciplina()
                 self.disciplinas[codigo] = disciplina
         transaction.commit()
@@ -283,14 +282,15 @@ class Departamento(persistent.Persistent):
         else:
             return None
 
+
 class Disciplina(persistent.Persistent):
-    def __init__(self, codigo, nivel, departamento):
+    def __init__(self, departamento, nivel, codigo):
         """
         Constrói objeto Disciplina()
 
         Parameters
         ----------
-        codigo : int
+        codigo : str
             Código da disciplina
         nivel : str
             Graduação ('graduacao') ou Pós-graduação ('posgraduacao')
@@ -300,7 +300,7 @@ class Disciplina(persistent.Persistent):
         self.nivel = nivel
         self.departamento = departamento
         self.denominacao = None
-        self.creditos = {'Teor': 0, 'Prat': 0, 'Ext': 0, 'Est': 0}
+        self.creditos = OrderedDict({'teoria': 0, 'pratica': 0, 'extensao': 0, 'estudos': 0})
         self.vigencia = None
         self.pre_requisitos = []
         self.ementa = None
@@ -334,9 +334,9 @@ class Disciplina(persistent.Persistent):
                     title = th[0].text
                     disciplina[title] = value
                 else:
-                    # no caso de o th tiver o rowspan > 1, na proxima linha vem vazio.
-                    # entao repete o titulo e adicona o conteudo
-                    # assume que no inicio do loop encontra um th
+                    # caso a tag th tenha o rowspan > 1, na próxima linha vem vazio.
+                    # então repete o título e adiciona o conteúdo
+                    # assume que no início do loop encontra um th
                     disciplina[title] += '\n' + value
         except Exception as e:
             # FIXME: especificar erro da exceção
@@ -384,7 +384,7 @@ class Curso(persistent.Persistent):
         Parameters
         ----------
         campus : Campus()
-        codigo : int
+        codigo : str
         """
 
         self.campus = campus
@@ -394,21 +394,93 @@ class Curso(persistent.Persistent):
         self.habilitacoes = {}
         self.last_updated_in = None
 
-    def crawler_habilitacoes(self):
-        # habilitacoes_url = url_mweb(nivel, 'curso_rel', self.codigo)
-        # table_lines_locator = 'xpath:/html/body/section//table[@id="datatable"]//tr'
-        # habilitacoes = table_to_dict(habilitacoes_url, table_lines_locator, key_index=1)
+        self.set_habilitacoes()
+
+    def crawler_habilitacoes(self, nivel):
+        # TODO: Try, Except, Finally
+        lib = Browser()
+        habilitacoes_url = url_mweb(nivel, 'curso_dados', self.codigo)
+        lib.open_headless_chrome_browser(habilitacoes_url)
+
+        main_table_locator = 'xpath:/html/body/section//div[@class="body table-responsive"]'
+        main_table_we = lib.find_element(main_table_locator)
+
+        curriculos_we = main_table_we.find_elements_by_partial_link_text('curriculo.aspx?cod=')
+        tables_we = main_table_we.find_elements_by_tag_name('table')
+        habilitacoes_we = dict(zip(curriculos_we, tables_we))
+
+        habilitacoes = {}
+        for curriculo_we, table_we in habilitacoes_we:
+            # Codigo
+            match = re.match(r'\D+(\d+)$', curriculo_we.url)
+            codigo = match.group(1)
+
+            # Table
+            titles = [th.text for th in table_we.find_elements_by_tag_name('th')]
+            values = [td.text for td in table_we.find_elements_by_tag_name('td')]
+
+            habilitacoes[codigo] = dict(zip(titles, values))
+
         return habilitacoes
 
     def set_habilitacoes(self):
-        pass
+        attr_mapping = {
+            'Grau': 'grau',
+            'Limite mínimo de permanência': 'permanencia_min',
+            'Limite máximo de permanência': 'permanencia_max',
+            'Quantidade de créditos para formatura': 'cred_formatura',
+            'Quantidade mínima de créditos optativos na área de concentração': 'cred_min_opt_concentr',
+            'Quantidade mínima de créditos optativos na área conexa': 'cred_min_opt_conexa',
+            'Quantidade máxima de créditos no módulo livre': 'cred_max_opt_concentr',
+            'Quantidade mínima de Horas em Atividade Complementar': 'horas_min_ativ_compl',
+            'Quantidade máxima integralizada de Horas em Atividade Complementar': 'horas_max_ativ_compl',
+            'Quantidade mínima de Horas em Atividade de Extensão': 'horas_min_ativ_ext',
+            'Quantidade máxima integralizada de Horas em Atividade de Extensão': 'horas_max_ativ_ext'}
+
+        for nivel in UnB().niveis:
+            habilitacoes = self.crawler_habilitacoes(nivel)
+            for codigo, attributes in habilitacoes:
+                habilitacao = Habilitacao(self, nivel, codigo)
+                write_attributes(attr_mapping, habilitacao, attributes)
+                self.habilitacoes[codigo] = habilitacao
+                self.set_curriculo(nivel, habilitacao)
+                transaction.commit()
+
+    def crawler_curriculo(self, nivel, codigo):
+        # TODO: Try, Except, Finally
+        lib = Browser()
+        curriculo_url = url_mweb(nivel, 'curriculo', codigo)
+        lib.open_headless_chrome_browser(curriculo_url)
+
+        tables_locator = 'xpath:/html/body/section//table[@id="datatable"]'
+        tables_we = lib.find_elements(tables_locator)
+        # TODO: pegar disciplinas das diferentes cadeias: tables_we[1:]
+        #
+        # curriculos_we = main_table_we.find_elements_by_partial_link_text('curriculo.aspx?cod=')
+        # tables_we = main_table_we.find_elements_by_tag_name('table')
+        # habilitacoes_we = dict(zip(curriculos_we, tables_we))
+
+
+
+        curriculo = {}
+
+        return curriculo
+
+    def set_curriculo(self, nivel, habilitacao):
+        curriculo = Curriculo(habilitacao)
+        attributes = self.crawler_curriculo(nivel, habilitacao.codigo)
+        attr_mapping = {}  # TODO: Mapa de atributos
+        write_attributes(attr_mapping, curriculo, attributes)
+        # transaction.commit()
 
 
 class Habilitacao(persistent.Persistent):
-    def __init__(self):
-        self.codigo = None
-        self.curriculo = None
-        self.last_updated_in = None
+    def __init__(self, curso, nivel, codigo):
+        self.curso = curso
+        self.nivel = nivel
+        self.codigo = codigo
+        self.curriculo = None  # Curriculo()
+        self.grau = None
 
     def crawler_curriculo(self):
         pass
@@ -416,10 +488,22 @@ class Habilitacao(persistent.Persistent):
     def set_curriculo(self):
         pass
 
+
 class Curriculo(persistent.Persistent):
-    def __init__(self):
-        self.codigo = None
+    def __init__(self, habilitacao):
+        self.habilitacao = habilitacao  # Habilitacao()
         self.disciplinas = []
+        self.permanencia_min = None
+        self.permanencia_max = None
+        self.cred_formatura = None
+        self.cred_min_opt_concentr = None
+        self.cred_min_opt_conexa = None
+        self.cred_max_opt_concentr = None
+        self.horas_min_ativ_compl = None
+        self.horas_max_ativ_compl = None
+        self.horas_min_ativ_ext = None
+        self.horas_max_ativ_ext = None
+        self.last_updated_in = None
         self.last_updated_in = None
 
     def crawler_disciplinas(self):
@@ -431,7 +515,50 @@ class Curriculo(persistent.Persistent):
     # TODO: adicionar créditos da disciplina ao ler curriculo da habilitacao
 
 
+class Cadeia(persistent.Persistent):
+    def __init__(self, curriculo, tipo):
+        """
+
+        Parameters
+        ----------
+        curriculo : Curriculo()
+        tipo : {'obrigatoria', 'obrigatoria_seletiva', 'optativa'}
+            Tipo das disciplinas na cadeia.
+        """
+        self.curriculo = curriculo
+        self.tipo = tipo
+        self.disciplinas = OOBTree()
+
+    def add_disciplina(self, codigo, creditos):
+        """
+
+        Parameters
+        ----------
+        codigo : str
+        creditos : str
+
+        Returns
+        -------
+
+        """
+        campus = self.curriculo.habilitacao.curso.campus
+        disciplina = campus.get_disciplina_by_codigo(codigo)
+
+        keys = disciplina.creditos.keys()
+        values = creditos.split(' ')
+        creditos = dict(zip(keys, values))
+        disciplina.creditos.update(creditos)
+
+        self.disciplinas[codigo] = disciplina
+
+    def get_disciplina_by_codigo(self):
+        pass
+
+    def iter_disciplinas(self):
+        pass
+
 # TODO: mensagens de evolução das etapas
+
 
 class Clock:
     def __init__(self):
@@ -445,6 +572,7 @@ class Clock:
 
 class Main:
     def __init__(self):
+        pass
 
     @staticmethod
     def build_database(db_location, overwrite=False):
@@ -474,4 +602,3 @@ if __name__ == '__main__':
     main = Main()
     db_location = 'data/data_v10.fs'
     main.build_database(db_location, overwrite=True)
-

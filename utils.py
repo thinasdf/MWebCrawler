@@ -76,7 +76,6 @@ def table_to_dict(web_url, table_lines_locator, key_index=0):
     finally:
         lib.driver.close()
     return dict_object
-    # TODO: tipefy dict key and values: codigos (int or str)
 
 
 def write_attributes(attr_mapping, obj_instance, attributes):
