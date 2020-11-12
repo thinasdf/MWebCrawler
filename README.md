@@ -14,4 +14,4 @@ Implementação de função que vasculham as páginas do [Matrícula Web][mweb] 
   - Curso
     - Habilitação
       - Currículo
-        - Disciplina
+        - Disciplina (referência)
