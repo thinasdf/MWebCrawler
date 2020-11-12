@@ -532,8 +532,7 @@ class Curso(persistent.Persistent):
                     self.set_curriculo(nivel, habilitacao)
                     transaction.commit()
 
-    @staticmethod
-    def crawler_tables(nivel, codigo):
+    def crawler_tables(self, nivel, codigo):
         """
         Acessa a página Matrícula Web e retorna as tabelas da habilitação.
 
