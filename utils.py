@@ -6,6 +6,7 @@
 # Utilidades.
 
 from RPA.Browser import Browser
+import datetime
 
 
 def url_mweb(nivel, pagina, cod):
@@ -67,10 +68,9 @@ def table_to_dict(web_url, table_lines_locator, key_index=0):
         lines = lib.find_elements(table_lines_locator)
         dict_object = lines_to_dict(lines, key_index)
         return dict_object
-    except Exception as e:
-        # FIXME: Especificar exceção
+    except Exception as e:  # FIXME: Especificar exceção
         print(f'Ao buscar a expressão {table_lines_locator} na página {web_url}, '
-              'ocorreu o seguinte erro: \n {e}')
+              'ocorreu o seguinte erro:\n{e}')
         return None
     finally:
         lib.driver.close()
@@ -92,3 +92,16 @@ def write_attributes(attr_mapping, obj_instance, attributes):
     for column_name, attribute_value in attributes.items():
         property_name = attr_mapping[column_name]
         setattr(obj_instance, property_name, attribute_value)
+
+
+class Clock:
+    def __init__(self):
+        self.start_time = datetime.datetime.now()
+
+    def get_duration(self):
+        # TODO: possibilidade de retornar em minutos ou segundos
+        now = datetime.datetime.now()
+        duration = now - self.start_time
+        seconds = duration.total_seconds()
+        minutes = f'{seconds/60:.2f}'
+        return minutes

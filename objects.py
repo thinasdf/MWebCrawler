@@ -3,13 +3,15 @@ Todos os itens, exceto Departamento, tem códigos que poderiam ser armazenados c
 No entanto, há Departamentos com códigos do tipo 052, 19 e 383.
 Por isso os códigos sao todos armazenados como str, inclusive nas chaves das OOBTree.
 """
+# TODO: montar grafo de dependencias das disciplinas
+# TODO: mostrar de quantos cursos uma disciplina faz parte
+# TODO: disciplinas que estao em mais cursos
+# TODO: cursos que tem mais disciplinas em comum
 
-import persistent
 from utils import *
-import datetime
+import persistent
 from BTrees.OOBTree import OOBTree
 import ZODB
-import ZODB.FileStorage
 import transaction
 import os
 import re
@@ -39,7 +41,8 @@ class UnB(persistent.Persistent):
         transaction.commit()
 
     def set_pre_requisitos(self):
-        pass  # TODO: Construir referências de pré-requisitos para cada disciplina
+        pass
+        # TODO: Construir referências de pré-requisitos para cada disciplina
 
     def iter_disciplinas(self):
         """
@@ -75,7 +78,7 @@ class UnB(persistent.Persistent):
 
         Returns
         -------
-        Departamento()
+        Departamento
 
         """
 
@@ -91,7 +94,7 @@ class UnB(persistent.Persistent):
 
         Returns
         -------
-        Departamento()
+        Departamento
 
         """
 
@@ -180,6 +183,39 @@ class Campus(persistent.Persistent):
         departamentos = table_to_dict(departamentos_url, table_lines_locator, key_index=0)
         return departamentos
 
+    @staticmethod
+    def get_nome_departamento(nivel, codigo):
+        """
+        Busca nome do Departamento.
+
+        Parameters
+        ----------
+        nivel : {'graduacao', 'posgraduacao'}
+            Graduação ou Pós-Graduação.
+        codigo : str
+            Código do departamento.
+
+        Returns
+        -------
+        str
+            Nome do departamento.
+        """
+        url_oferta = url_mweb(nivel, 'oferta_dis', codigo)
+        lib = Browser()
+        try:
+            lib.open_headless_chrome_browser(url_oferta)
+            block_header = lib.find_element('xpath:/html/body/section//div[@class="block-header"]')
+            nome = block_header.find_elements_by_tag_name('small').text
+            return nome
+        except Exception as e:
+            # FIXME: especificar erro da exceção
+            print(f'Ao acessar a página {url_oferta} '
+                  f'para buscar o nome do departamento {codigo}, '
+                  f'foi encontrado o seguinte erro:\n{e}')
+            return None
+        finally:
+            lib.driver.close()
+
     def set_departamentos(self):
         """
         Cria objetos de Departamento() a partir do dicionário retornado pela função crawler_departamentos()
@@ -187,8 +223,6 @@ class Campus(persistent.Persistent):
         Exemplo:
         052 {'Sigla': 'CDT', 'Denominação': 'CENTRO DE APOIO AO DESENVOLVIMENTO TECNOLÓGICO'}
         """
-
-        # TODO: pegar nome bonito do Departamento. Onde???
 
         attr_mapping_rev = {
             # 'codigo': 'Código',
@@ -201,7 +235,8 @@ class Campus(persistent.Persistent):
                 for codigo, attributes in departamentos:
                     if codigo not in self.departamentos:
                         sigla = attributes[attr_mapping_rev['sigla']]
-                        denominacao = attributes[attr_mapping_rev['denominacao']]
+                        # denominacao = attributes[attr_mapping_rev['denominacao']]
+                        denominacao = self.get_nome_departamento(nivel, codigo)
                         departamento = Departamento(self, codigo, sigla, denominacao)
                         self.departamentos[codigo] = departamento
                         transaction.commit()
@@ -217,7 +252,7 @@ class Campus(persistent.Persistent):
 
         Returns
         -------
-        Departamento()
+        Departamento
         """
 
         for departamento in self.departamentos.values():
@@ -236,7 +271,7 @@ class Campus(persistent.Persistent):
 
         Returns
         -------
-        Departamento()
+        Departamento
         """
         if codigo in self.departamentos:
             return self.departamentos.get(codigo)
@@ -254,7 +289,7 @@ class Departamento(persistent.Persistent):
 
         Parameters
         ----------
-            campus : Campus()
+            campus : Campus
             codigo : str
                 string porque há departamentos com e sem 0 (zero) na frente
             sigla : str
@@ -320,7 +355,7 @@ class Disciplina(persistent.Persistent):
             Código da disciplina.
         nivel : {'graduacao', 'posgraduacao'}
             Graduação ou Pós-Graduação.
-        departamento : Departamento()
+        departamento : Departamento
         """
         self.codigo = codigo
         self.nivel = nivel
@@ -368,7 +403,7 @@ class Disciplina(persistent.Persistent):
         except Exception as e:
             # FIXME: especificar erro da exceção
             print(f'Ao acessar a página {url_disciplinas} para buscar informações sobre a disciplina, '
-                  f'foi encontrado o seguinte erro: {e}')
+                  f'foi encontrado o seguinte erro:\n{e}')
             return None
         finally:
             lib.driver.close()
@@ -410,8 +445,9 @@ class Curso(persistent.Persistent):
 
         Parameters
         ----------
-        campus : Campus()
+        campus : Campus
         codigo : str
+            Código do curso.
         """
 
         self.campus = campus
@@ -465,13 +501,14 @@ class Curso(persistent.Persistent):
             # FIXME: especificar erro da exceção
             print(f'Ao acessar a página {habilitacoes_url} para buscar habilitações '
                   f'do curso de {self.denominacao}, '
-                  f'foi encontrado o seguinte erro: {e}')
+                  f'foi encontrado o seguinte erro:\n{e}')
             return None
         finally:
             lib.driver.close()
 
     def set_habilitacoes(self):
         # TODO: Verificar problema de habilitacoes na posgraduacao sem curriculo, ex: Geografia
+        # FIXME: Armazenar informações no currículo ao invés da habilitação.
         attr_mapping = {
             'Grau': 'grau',
             'Limite mínimo de permanência': 'permanencia_min',
@@ -495,7 +532,8 @@ class Curso(persistent.Persistent):
                     self.set_curriculo(nivel, habilitacao)
                     transaction.commit()
 
-    def crawler_tables(self, nivel, codigo):
+    @staticmethod
+    def crawler_tables(nivel, codigo):
         """
         Acessa a página Matrícula Web e retorna as tabelas da habilitação.
 
@@ -504,7 +542,7 @@ class Curso(persistent.Persistent):
         nivel : {'graduacao', 'posgraduacao'}
             Graduação ou Pós-Graduação.
         codigo : str
-            Código da habilitação
+            Código da habilitação.
 
         Returns
         -------
@@ -527,8 +565,8 @@ class Curso(persistent.Persistent):
         except Exception as e:
             # FIXME: especificar erro da exceção
             print(f'Ao acessar a página {curriculo_url} '
-                  'para buscar o curriculo do curso {self.denominacao}, '
-                  f'foi encontrado o seguinte erro: {e}')
+                  f'para buscar o curriculo do curso {self.denominacao}, '
+                  f'foi encontrado o seguinte erro:\n{e}')
             return None
         finally:
             lib.driver.close()
@@ -547,48 +585,34 @@ class Curso(persistent.Persistent):
         tables = self.crawler_tables(nivel, habilitacao.codigo)
 
         table_mapping = [
-            # {'tipo': 'curriculo', 'pos': 0},
+            {'tipo': 'curriculo', 'pos': 0},
             {'tipo': 'obrigatoria', 'pos': 1},
             {'tipo': 'obrigatoria_seletiva', 'pos': 2},
             {'tipo': 'optativa', 'pos': 3}]
 
         attr_mapping = {
-            'Código': 'codigo',
-            'Disciplina': 'disciplina',
-            'Créditos': 'creditos',
-            'Área': 'area'}
-
-        for table in tables:
-            pass
+            'codigo': 'Código',
+            'disciplina': 'Disciplina',
+            'creditos': 'Créditos',
+            'area': 'Área'}
 
         curriculo = Curriculo(habilitacao)
-
-
 
         for mapping in table_mapping:
             tipo = mapping['tipo']
             pos = mapping['pos']
-            table = cadeias[pos]
-            disciplinas = lines_to_dict(table, key_index=0)
-            cadeia = Cadeia(curriculo, tipo)
-        #
-        # curriculos_we = main_table_we.find_elements_by_partial_link_text('curriculo.aspx?cod=')
-        # tables_we = main_table_we.find_elements_by_tag_name('table')
-        # habilitacoes_we = dict(zip(curriculos_we, tables_we))
-
-        curriculo = {}
-
-        return curriculo
-
-
-
-
-
-        if attributes:
-
-            attr_mapping = {}  # TODO: Mapa de atributos
-            write_attributes(attr_mapping, curriculo, attributes)
-            # transaction.commit()
+            table = tables[pos]
+            if pos == 0:
+                pass
+                # TODO: pegar informações complementares sobre o currículo da habilitação
+            else:
+                cadeia = Cadeia(curriculo, tipo)
+                for line in table:
+                    codigo = line[attr_mapping['codigo']]
+                    creditos = line[attr_mapping['creditos']]
+                    cadeia.add_disciplina(codigo, creditos)
+                curriculo.cadeias.append(cadeia)
+            transaction.commit()
 
 
 class Habilitacao(persistent.Persistent):
@@ -601,15 +625,17 @@ class Habilitacao(persistent.Persistent):
 
     def crawler_curriculo(self):
         pass
+        # TODO: trazer código da função Curso().crawler_tables para cá
 
     def set_curriculo(self):
         pass
+        # TODO: trazer código da função Curso().set_curriculo para cá
 
 
 class Curriculo(persistent.Persistent):
     def __init__(self, habilitacao):
         self.habilitacao = habilitacao  # Habilitacao()
-        self.disciplinas = []
+        self.cadeias = []
         self.permanencia_min = None
         self.permanencia_max = None
         self.cred_formatura = None
@@ -625,11 +651,11 @@ class Curriculo(persistent.Persistent):
 
     def crawler_disciplinas(self):
         pass
+        # TODO: trazer código da função Curso().crawler_tables para cá
 
     def set_disciplinas(self):
         pass
-
-    # TODO: adicionar créditos da disciplina ao ler curriculo da habilitacao
+        # TODO: trazer código da função Curso().crawler_tables para cá
 
 
 class Cadeia(persistent.Persistent):
@@ -638,7 +664,7 @@ class Cadeia(persistent.Persistent):
 
         Parameters
         ----------
-        curriculo : Curriculo()
+        curriculo : Curriculo
         tipo : {'obrigatoria', 'obrigatoria_seletiva', 'optativa'}
             Tipo das disciplinas na cadeia.
         """
@@ -652,10 +678,9 @@ class Cadeia(persistent.Persistent):
         Parameters
         ----------
         codigo : str
+            Código da disciplina.
         creditos : str
-
-        Returns
-        -------
+            Créditos dividos em quatro áreas: '002 004 000 006'
 
         """
         campus = self.curriculo.habilitacao.curso.campus
@@ -663,28 +688,20 @@ class Cadeia(persistent.Persistent):
 
         keys = disciplina.creditos.keys()
         values = creditos.split(' ')
-        creditos = dict(zip(keys, values))
-        disciplina.creditos.update(creditos)
+        values = list(map(int, values))
+        creditos_dict = dict(zip(keys, values))
+        disciplina.creditos.update(creditos_dict)
 
         self.disciplinas[codigo] = disciplina
 
-    def get_disciplina_by_codigo(self):
-        pass
+    def get_disciplina_by_codigo(self, codigo):
+        return self.disciplinas.get(codigo)
 
     def iter_disciplinas(self):
-        pass
+        for disciplina in self.disciplinas.values():
+            yield disciplina
 
 # TODO: mensagens de evolução das etapas
-
-
-class Clock:
-    def __init__(self):
-        self.start_time = datetime.datetime.now()
-
-    def get_duration(self):
-        now = datetime.datetime.now()
-        duration = now - self.start_time
-        return duration.total_seconds()/60
 
 
 class Main:
@@ -703,7 +720,6 @@ class Main:
         if overwrite or not exists:
             root.Unb = UnB()
             root.Unb.build()
-            duration = None
             print(f'Finished building database in {clock.get_duration()} minutes')
 
         transaction.commit()
@@ -717,5 +733,5 @@ def test():
 
 if __name__ == '__main__':
     main = Main()
-    db_location = 'data/data_v10.fs'
+    db_location = 'data/data_v1.fs'
     main.build_database(db_location, overwrite=True)
