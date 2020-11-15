@@ -70,7 +70,7 @@ def table_to_dict(web_url, table_lines_locator, key_index=0):
         return dict_object
     except Exception as e:  # FIXME: Especificar exceção
         print(f'Ao buscar a expressão {table_lines_locator} na página {web_url}, '
-              'ocorreu o seguinte erro:\n{e}')
+              f'ocorreu o seguinte erro:\n{e}')
         return None
     finally:
         lib.driver.close()
@@ -89,9 +89,14 @@ def write_attributes(attr_mapping, obj_instance, attributes):
         The dictionary returned by the crawler.
     -------
     """
-    for column_name, attribute_value in attributes.items():
-        property_name = attr_mapping[column_name]
-        setattr(obj_instance, property_name, attribute_value)
+
+    for column_name, attribute_name in attr_mapping.items():
+        if column_name in attributes:
+            attribute_value = attributes[column_name]
+            setattr(obj_instance, attribute_name, attribute_value)
+        else:
+            print(f'\tCrawler: não foi encontrado o atributo `{column_name}` '
+                  f'para `{obj_instance!r}`')
 
 
 class Clock:
@@ -105,3 +110,14 @@ class Clock:
         seconds = duration.total_seconds()
         minutes = f'{seconds/60:.2f}'
         return minutes
+
+
+class Messenger():
+    current_level = 0
+    def __init__(self, message):
+        pass
+
+    def __enter__(self):
+        current_level
+
+    def __exit__(self, exc_type, exc_val, exc_tb):

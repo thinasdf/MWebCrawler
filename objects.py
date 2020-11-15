@@ -3,10 +3,12 @@ Todos os itens, exceto Departamento, tem códigos que poderiam ser armazenados c
 No entanto, há Departamentos com códigos do tipo 052, 19 e 383.
 Por isso os códigos sao todos armazenados como str, inclusive nas chaves das OOBTree.
 """
+# TODO: implementar __repr__ nas classes
 # TODO: montar grafo de dependencias das disciplinas
 # TODO: mostrar de quantos cursos uma disciplina faz parte
 # TODO: disciplinas que estao em mais cursos
 # TODO: cursos que tem mais disciplinas em comum
+# TODO: mensagens de evolução das etapas
 
 from utils import *
 import persistent
@@ -22,6 +24,7 @@ class UnB(persistent.Persistent):
     def __init__(self):
         self.campi = {}
         self.niveis = ['graduacao', 'posgraduacao']
+        self.denominacao = 'Universidade de Brasília'
 
     def build(self):
         self.set_campi()
@@ -30,9 +33,9 @@ class UnB(persistent.Persistent):
 
     def set_campi(self):
         value_map = {
-            1: 'Darcy Ribeiro',
-            2: 'Planaltina',
-            3: 'Ceilândia',
+            # 1: 'Darcy Ribeiro',
+            # 2: 'Planaltina',
+            # 3: 'Ceilândia',
             4: 'Gama'}
 
         for codigo, denominacao in value_map.items():
@@ -103,6 +106,10 @@ class UnB(persistent.Persistent):
 
     def get_curso_by_codigo(self):
         pass
+
+    def __repr__(self):
+        return (f'<{self.__class__.__name__}'
+                f'({self.denominacao})>')
 
 
 class Campus(persistent.Persistent):
@@ -205,7 +212,7 @@ class Campus(persistent.Persistent):
         try:
             lib.open_headless_chrome_browser(url_oferta)
             block_header = lib.find_element('xpath:/html/body/section//div[@class="block-header"]')
-            nome = block_header.find_elements_by_tag_name('small').text
+            nome = block_header.find_element_by_tag_name('small').text
             return nome
         except Exception as e:
             # FIXME: especificar erro da exceção
@@ -232,7 +239,7 @@ class Campus(persistent.Persistent):
         for nivel in UnB().niveis:
             departamentos = self.crawler_departamentos(nivel)
             if departamentos:
-                for codigo, attributes in departamentos:
+                for codigo, attributes in departamentos.items():
                     if codigo not in self.departamentos:
                         sigla = attributes[attr_mapping_rev['sigla']]
                         # denominacao = attributes[attr_mapping_rev['denominacao']]
@@ -240,6 +247,7 @@ class Campus(persistent.Persistent):
                         departamento = Departamento(self, codigo, sigla, denominacao)
                         self.departamentos[codigo] = departamento
                         transaction.commit()
+                        # transaction.begin # TODO: tenho que iniciar transacao???
 
     def get_departamento_by_sigla(self, sigla):
         """
@@ -281,6 +289,10 @@ class Campus(persistent.Persistent):
     def get_disciplina_by_codigo(self, codigo):
         for departamento in self.departamentos.values():
             return departamento.get_disciplina_by_codigo(codigo)
+
+    def __repr__(self):
+        return (f'<{self.__class__.__name__}'
+                f'({self.denominacao})>')
 
 
 class Departamento(persistent.Persistent):
@@ -342,6 +354,13 @@ class Departamento(persistent.Persistent):
             return self.disciplinas.get(codigo)
         else:
             return None
+
+    def __repr__(self):
+        return (f'<{self.__class__.__name__}'
+                f'([{self.codigo}] '
+                f'{self.sigla}-, '
+                f'{self.denominacao}, '
+                f'{self.campus!r})>')
 
 
 class Disciplina(persistent.Persistent):
@@ -411,32 +430,32 @@ class Disciplina(persistent.Persistent):
     def set_disciplina(self):
         """
         Preenche os atributos da disciplina.
+
         """
 
-        disciplinas = self.crawler_disciplina()
-        if disciplinas:
+        disciplina = self.crawler_disciplina()
+        if disciplina:
             attr_mapping = {
-                'Órgão': 'departamento',
+                # 'Órgão': 'departamento',
                 # 'Código': 'codigo',
-                # 'Denominação': 'denominacao',
-                'Nível': 'nivel',
+                'Denominação': 'denominacao',
+                # 'Nível': 'nivel',
                 'Início da Vigência em': 'vigencia',
                 'Pré-requisitos': 'pre_requisitos',
                 'Bibliografia': 'bibliografia',
                 'Ementa': 'ementa',
                 'Programa': 'programa'}
 
-            write_attributes(attr_mapping, self, disciplinas)
+            write_attributes(attr_mapping, self, disciplina)
 
             transaction.commit()
 
     def __repr__(self):
-        representation = \
-            f'{self.codigo} - '\
-            f'{self.sigla} - '\
-            f'{self.denominacao} '\
-            f'({self.campus.denominacao})'
-        return representation
+        return (f'<{self.__class__.__name__}'
+                f'({self.nivel} '
+                f'[{self.codigo}] '
+                f'{self.departamento.sigla} - '
+                f'{self.denominacao})>')
 
 
 class Curso(persistent.Persistent):
@@ -613,6 +632,13 @@ class Curso(persistent.Persistent):
                 curriculo.cadeias.append(cadeia)
             transaction.commit()
 
+    def __repr__(self):
+        return (f'<{self.__class__.__name__}'
+                f'({self.nivel}: '
+                f'[{self.codigo}] '
+                f'{self.denominacao}, '
+                f'{self.campus!r})>')
+
 
 class Habilitacao(persistent.Persistent):
     def __init__(self, curso, nivel, codigo):
@@ -629,6 +655,11 @@ class Habilitacao(persistent.Persistent):
     def set_curriculo(self):
         pass
         # TODO: trazer código da função Curso().set_curriculo para cá
+
+    def __repr__(self):
+        return (f'<{self.__class__.__name__}'
+                f'({self.grau}, '
+                f'{self.curso.denominacao})>')
 
 
 class Curriculo(persistent.Persistent):
@@ -656,6 +687,10 @@ class Curriculo(persistent.Persistent):
         pass
         # TODO: trazer código da função Curso().crawler_tables para cá
 
+    def __repr__(self):
+        return (f'<{self.__class__.__name__}'
+                f'{self.cred_formatura} créditos)>')
+
 
 class Cadeia(persistent.Persistent):
     def __init__(self, curriculo, tipo):
@@ -664,7 +699,7 @@ class Cadeia(persistent.Persistent):
         Parameters
         ----------
         curriculo : Curriculo
-        tipo : {'obrigatoria', 'obrigatoria_seletiva', 'optativa'}
+        tipo : {'obrigatorias', 'obrigatorias_seletivas', 'optativas'}
             Tipo das disciplinas na cadeia.
         """
         self.curriculo = curriculo
@@ -700,7 +735,16 @@ class Cadeia(persistent.Persistent):
         for disciplina in self.disciplinas.values():
             yield disciplina
 
-# TODO: mensagens de evolução das etapas
+    def __len__(self):
+        count = 0
+        for disciplina in self.iter_disciplinas():
+            count += 1
+        return count
+
+    def __repr__(self):
+        return (f'<{self.__class__.__name__}'
+                f'({self.tipo}: '
+                f'{len(self)} disciplinas)>')
 
 
 class Main:
